@@ -2202,4 +2202,307 @@ function addSheet(){
   workbook.current = name;
   selection={r1:0,c1:0,r2:0,c2:0}; active={r:0,c:0};
   computedCache={}; renderAll(); markDirty();
- 
+  return name;
+}
+document.getElementById('addSheetBtn').onclick = addSheet;
+
+/* Add several sheets at once, e.g. "Jan, Feb, Mar" or "Sheet1..Sheet5" */
+function openAddMultipleSheetsDialog(){
+  showDialog(`
+    <h3>Add multiple sheets</h3>
+    <label>How many sheets?</label>
+    <input id="dlgSheetCount" type="number" min="1" max="50" value="3">
+    <label>Names (comma-separated, optional — overrides count)</label>
+    <input id="dlgSheetNames" placeholder="e.g. Jan, Feb, Mar">
+    <div class="dialog-actions">
+      <button class="btn" id="dlgCancel">Cancel</button>
+      <button class="btn primary" id="dlgOk">Add sheets</button>
+    </div>
+  `);
+  document.getElementById('dlgCancel').onclick = closeDialog;
+  document.getElementById('dlgOk').onclick = ()=>{
+    const namesRaw = document.getElementById('dlgSheetNames').value.trim();
+    let names = [];
+    if(namesRaw){
+      names = namesRaw.split(',').map(s=>s.trim()).filter(Boolean);
+    } else {
+      const count = clamp(parseInt(document.getElementById('dlgSheetCount').value,10) || 1, 1, 50);
+      for(let i=0;i<count;i++) names.push(null); // auto-named
+    }
+    pushUndo();
+    let lastName = null;
+    names.forEach(n=>{
+      let name = n;
+      if(!name){
+        let k=1; name = "Sheet"+(workbook.order.length+1);
+        while(workbook.sheets[name]){ k++; name="Sheet"+(workbook.order.length+k); }
+      } else if(workbook.sheets[name]){
+        let k=2; const base=name;
+        while(workbook.sheets[name]){ name = base+"_"+k; k++; }
+      }
+      workbook.sheets[name] = makeSheet();
+      workbook.order.push(name);
+      lastName = name;
+    });
+    if(lastName) workbook.current = lastName;
+    selection={r1:0,c1:0,r2:0,c2:0}; active={r:0,c:0};
+    computedCache={}; renderAll(); markDirty(); closeDialog();
+    showToast(`Added ${names.length} sheet(s)`);
+  };
+}
+
+function renameSheetPrompt(name){
+  showDialog(`
+    <h3>Rename sheet</h3>
+    <label>Sheet name</label><input id="dlgSheetName" value="${escapeHtml(name)}">
+    <div class="dialog-actions"><button class="btn" id="dlgCancel">Cancel</button><button class="btn primary" id="dlgOk">Rename</button></div>
+  `);
+  document.getElementById('dlgCancel').onclick = closeDialog;
+  document.getElementById('dlgOk').onclick = ()=>{
+    const newName = document.getElementById('dlgSheetName').value.trim();
+    if(newName && !workbook.sheets[newName]){
+      workbook.sheets[newName] = workbook.sheets[name];
+      delete workbook.sheets[name];
+      workbook.order = workbook.order.map(n=>n===name?newName:n);
+      if(workbook.current===name) workbook.current=newName;
+      renderAll(); markDirty();
+    }
+    closeDialog();
+  };
+}
+function renameOrDeleteSheet(name){
+  showDialog(`
+    <h3>${escapeHtml(name)}</h3>
+    <div class="dialog-actions">
+      <button class="btn" id="dlgRename">Rename</button>
+      <button class="btn" id="dlgDuplicate">Duplicate</button>
+      <button class="btn" id="dlgDelete" style="color:var(--danger)">Delete</button>
+    </div>
+  `);
+  document.getElementById('dlgRename').onclick = ()=>{ closeDialog(); renameSheetPrompt(name); };
+  document.getElementById('dlgDuplicate').onclick = ()=>{ closeDialog(); workbook.current=name; duplicateSheet(); };
+  document.getElementById('dlgDelete').onclick = ()=>{
+    if(workbook.order.length<=1){ showToast("Can't delete the only sheet"); closeDialog(); return; }
+    delete workbook.sheets[name];
+    workbook.order = workbook.order.filter(n=>n!==name);
+    if(workbook.current===name) workbook.current = workbook.order[0];
+    closeDialog(); computedCache={}; renderAll(); markDirty();
+  };
+}
+
+/* ================= IMPORT / EXPORT ================= */
+function exportCsv(){
+  const s = sheet();
+  let maxC = 0;
+  Object.keys(s.data).forEach(id=>{ const p=parseId(id); if(p.c>maxC) maxC=p.c; });
+  let lines = [];
+  for(let r=0;r<s.rows;r++){
+    let hasContent=false;
+    const row=[];
+    for(let c=0;c<=maxC;c++){
+      const v = evaluateCell(cellId(c,r));
+      if(v!=="") hasContent=true;
+      row.push(csvEscape(v));
+    }
+    if(hasContent || lines.length>0) lines.push(row.join(","));
+  }
+  downloadFile(lines.join("\n"), (document.getElementById('filename').value||"sheet")+".csv", "text/csv");
+}
+function csvEscape(v){
+  v = String(v ?? "");
+  if(v.includes(',')||v.includes('"')||v.includes('\n')) return '"'+v.replace(/"/g,'""')+'"';
+  return v;
+}
+function exportJson(){
+  downloadFile(JSON.stringify(workbook,null,2), (document.getElementById('filename').value||"sheet")+".json", "application/json");
+}
+
+/* --- Excel (.xlsx) export: writes EVERY sheet in the workbook into one
+   real Excel file, each Pro Sheet tab becoming its own Excel worksheet,
+   including merged cell ranges. Requires the SheetJS (xlsx) library. --- */
+function exportXlsx(){
+  if(typeof XLSX === 'undefined'){ showToast("Excel library failed to load — check your connection"); return; }
+  const wb = XLSX.utils.book_new();
+  workbook.order.forEach(name=>{
+    const sh = workbook.sheets[name];
+    let maxC = 0;
+    Object.keys(sh.data).forEach(id=>{ const p=parseId(id); if(p.c>maxC) maxC=p.c; });
+    const cache = {};
+    const aoa = [];
+    for(let r=0; r<sh.rows; r++){
+      const row = [];
+      let rowHasData = false;
+      for(let c=0; c<=maxC; c++){
+        const id = cellId(c,r);
+        const v = evaluateCellInSheet(name, id, cache);
+        if(v!=="") rowHasData = true;
+        row.push(v);
+      }
+      if(rowHasData || aoa.length>0) aoa.push(row);
+    }
+    const ws = XLSX.utils.aoa_to_sheet(aoa.length ? aoa : [[""]]);
+    if(sh.merges && sh.merges.length){
+      ws['!merges'] = sh.merges.map(m=>({ s:{r:m.r1,c:m.c1}, e:{r:m.r2,c:m.c2} }));
+    }
+    // Excel sheet names: max 31 chars, no []:*?/\\
+    let safeName = name.replace(/[\[\]:*?\/\\]/g,'').slice(0,31) || "Sheet";
+    XLSX.utils.book_append_sheet(wb, ws, safeName);
+  });
+  XLSX.writeFile(wb, (document.getElementById('filename').value||"sheet")+".xlsx");
+  showToast("Downloaded Excel workbook ("+workbook.order.length+" sheet"+(workbook.order.length>1?'s':'')+")");
+}
+
+function downloadFile(content, name, type){
+  const blob = new Blob([content], {type});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.click();
+  URL.revokeObjectURL(url);
+  showToast("Downloaded "+name);
+}
+document.getElementById('csvFileInput')?.remove();
+const csvInput = document.createElement('input');
+csvInput.type='file'; csvInput.accept='.csv'; csvInput.id='csvFileInput'; csvInput.style.display='none';
+document.body.appendChild(csvInput);
+csvInput.addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    pushUndo();
+    const text = ev.target.result;
+    const rows = parseCsv(text);
+    addSheet();
+    const s = sheet();
+    s.rows = Math.max(DEFAULT_ROWS, rows.length+5);
+    rows.forEach((row,ri)=>{
+      row.forEach((val,ci)=>{
+        if(ci<COLS) ensureCell(cellId(ci,ri)).v = val;
+      });
+    });
+    computedCache={}; renderAll(); markDirty();
+    showToast("CSV imported");
+  };
+  reader.readAsText(file);
+  csvInput.value = "";
+});
+function parseCsv(text){
+  const rows = [];
+  let row=[], field="", inQuotes=false;
+  for(let i=0;i<text.length;i++){
+    const ch = text[i];
+    if(inQuotes){
+      if(ch === '"'){ if(text[i+1]==='"'){ field+='"'; i++; } else inQuotes=false; }
+      else field+=ch;
+    } else {
+      if(ch === '"') inQuotes=true;
+      else if(ch === ','){ row.push(field); field=""; }
+      else if(ch === '\n'){ row.push(field); rows.push(row); row=[]; field=""; }
+      else if(ch === '\r'){}
+      else field+=ch;
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+
+/* --- Excel (.xlsx) import: reads EVERY worksheet from the uploaded file
+   and rebuilds the whole Pro Sheet workbook, one tab per Excel sheet,
+   including merged cell ranges. Replaces the current workbook. --- */
+const xlsxInput = document.createElement('input');
+xlsxInput.type='file'; xlsxInput.accept='.xlsx,.xls'; xlsxInput.id='xlsxFileInput'; xlsxInput.style.display='none';
+document.body.appendChild(xlsxInput);
+xlsxInput.addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  if(typeof XLSX === 'undefined'){ showToast("Excel library failed to load — check your connection"); xlsxInput.value=""; return; }
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    try{
+      pushUndo();
+      const data = new Uint8Array(ev.target.result);
+      const xwb = XLSX.read(data, {type:'array'});
+      const newSheets = {}, order = [];
+      xwb.SheetNames.forEach(sname=>{
+        const ws = xwb.Sheets[sname];
+        const aoa = XLSX.utils.sheet_to_json(ws, {header:1, raw:false, defval:""});
+        const newSheet = makeSheet();
+        aoa.forEach((row,ri)=>{
+          row.forEach((val,ci)=>{
+            if(ci<COLS && val!=="" && val!==null && val!==undefined){
+              newSheet.data[cellId(ci,ri)] = {v:String(val), f:{}};
+            }
+          });
+        });
+        newSheet.rows = Math.max(DEFAULT_ROWS, aoa.length+5);
+        if(ws['!merges']){
+          newSheet.merges = ws['!merges'].map(m=>({r1:m.s.r,c1:m.s.c,r2:m.e.r,c2:m.e.c}));
+        }
+        let uniqueName = sname || ("Sheet"+(order.length+1));
+        if(newSheets[uniqueName]){
+          let base = uniqueName, k=2;
+          while(newSheets[uniqueName]){ uniqueName = base+"_"+k; k++; }
+        }
+        newSheets[uniqueName] = newSheet;
+        order.push(uniqueName);
+      });
+      if(!order.length){ showToast("No sheets found in file"); return; }
+      workbook.sheets = newSheets;
+      workbook.order = order;
+      workbook.current = order[0];
+      selection={r1:0,c1:0,r2:0,c2:0}; active={r:0,c:0};
+      computedCache={}; renderAll(); markDirty();
+      showToast(`Excel file imported (${order.length} sheet${order.length>1?'s':''})`);
+    }catch(err){
+      showToast("Couldn't read that Excel file");
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  xlsxInput.value = "";
+});
+
+/* ================= SAVE / LOAD ================= */
+function saveWorkbook(manual){
+  try{
+    workbook.filename = document.getElementById('filename').value;
+    workbook.lastSavedAt = Date.now();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(workbook));
+    registerInIndex(DOC_ID, workbook.filename || "Untitled spreadsheet", false);
+    if(!authState) setSaveStatus("All changes saved", "");
+    document.title = (workbook.filename || "Untitled spreadsheet") + " — Pro Sheet";
+    if(manual){
+      showToast("Saved");
+      if(authState) cloudSaveCurrentDoc();
+    }
+  }catch(e){ setSaveStatus("Save failed", "error"); }
+}
+function loadWorkbook(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      workbook = parsed;
+      document.getElementById('filename').value = workbook.filename || "Untitled spreadsheet";
+    }
+  }catch(e){ /* ignore */ }
+}
+document.getElementById('saveBtn').onclick = ()=>saveWorkbook(true);
+document.getElementById('filename').addEventListener('input', markDirty);
+document.getElementById('filename').addEventListener('keydown', (e)=>{ if(e.key==='Enter') e.target.blur(); });
+
+/* ================= INIT ================= */
+loadAuthState();
+loadWorkbook();
+if(!workbook.sheets[workbook.current]) workbook.current = workbook.order[0];
+registerInIndex(DOC_ID, workbook.filename || "Untitled spreadsheet", false);
+document.title = (workbook.filename || "Untitled spreadsheet") + " — Pro Sheet";
+renderAll();
+syncUndoRedoButtons();
+gridEl.setAttribute('tabindex','0');
+initGoogleSignIn();
+if(authState) cloudLoadCurrentDoc();
+
+})();
+</script>
+</body>
+</html>
