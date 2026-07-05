@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root{
   --bg:#0e1016;
@@ -74,6 +75,9 @@ body{
 }
 #filename:hover,#filename:focus{border-color:var(--border);background:var(--surface-2);outline:none;}
 .save-status{font-size:10.5px;color:var(--text-faint);padding-left:7px;font-family:'DM Mono',monospace;}
+.save-status.syncing{color:var(--amber);}
+.save-status.synced{color:var(--success);}
+.save-status.error{color:var(--danger);}
 .menubar{display:flex;gap:2px;margin-left:6px;}
 .menu-item{
   font-size:12.5px;color:var(--text-dim);padding:5px 9px;border-radius:5px;cursor:pointer;position:relative;
@@ -103,6 +107,16 @@ body{
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#0b0d13;font-weight:700;}
 .btn.primary:hover{background:#7d9aff;}
 .btn svg{width:14px;height:14px;}
+.account-chip{
+  display:flex;align-items:center;gap:7px;background:var(--surface-2);border:1px solid var(--border);
+  border-radius:20px;padding:4px 10px 4px 4px;cursor:pointer;font-size:12px;color:var(--text-dim);
+}
+.account-chip:hover{background:var(--surface-3);}
+.account-chip img{width:22px;height:22px;border-radius:50%;}
+.account-chip .avatar-fallback{
+  width:22px;height:22px;border-radius:50%;background:var(--accent);color:#0b0d13;
+  display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;font-family:'DM Mono',monospace;
+}
 
 /* ============ TOOLBAR ============ */
 .toolbar{
@@ -144,6 +158,10 @@ body{
 .swatch-custom input[type=color]{width:26px;height:26px;border:none;background:transparent;cursor:pointer;padding:0;}
 .swatch-none{grid-column:span 8;font-size:11px;color:var(--text-dim);padding:4px 2px;cursor:pointer;border-top:1px solid var(--border);margin-top:4px;padding-top:6px;}
 .swatch-none:hover{color:var(--text);}
+.swatch-recent-label{grid-column:span 8;font-size:9.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.4px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border);}
+.swatch-opacity-wrap{grid-column:span 8;display:flex;align-items:center;gap:8px;margin-top:8px;}
+.swatch-opacity-wrap input[type=range]{flex:1;accent-color:var(--accent);}
+.swatch-opacity-wrap .opacity-val{font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);width:32px;text-align:right;}
 
 /* ============ FORMULA BAR ============ */
 .formulabar{
@@ -358,6 +376,7 @@ td.cell.active-cell{
   </div>
   <div class="topbar-right">
     <button class="btn" id="chartBtn">Chart</button>
+    <div id="accountArea"></div>
     <button class="btn primary" id="saveBtn">Save</button>
   </div>
 </div>
@@ -488,6 +507,124 @@ const COLORS = ["#e7e9ef","#8b90a3","#ff6b6b","#ffb454","#ffe066","#4ade80","#4d
                  "#ffffff","#c2c6d6","#c0392b","#e67e22","#f1c40f","#27ae60","#16a085","#2980b9","#8e44ad","#d81b60",
                  "transparent","#0e1016","#151822","#1c202c","#242938","#2a2f3d","#3a4a8a","#6c8cff33","#4ade8033","#ffb45433"];
 
+/* ================= CLOUD SYNC (Google OAuth + Apps Script) ================= */
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz9yx31d4-vTxy2Y8lIuJzELhS3h8Q4gLlihMkLiSfRY5P6OnF8Rnht91KngzW1sxml0g/exec";
+const OAUTH_CLIENT_ID = "384904424093-j1a6kupjerhjufurpvur4hbik6k90bla.apps.googleusercontent.com";
+const AUTH_KEY = "prosheet_auth";
+let authState = null; // {idToken, email, name, picture}
+let cloudSyncTimer = null;
+let lastCloudSyncedAt = 0;
+
+function loadAuthState(){
+  try{
+    const raw = localStorage.getItem(AUTH_KEY);
+    if(raw) authState = JSON.parse(raw);
+  }catch(e){ authState = null; }
+}
+function persistAuthState(){
+  if(authState) localStorage.setItem(AUTH_KEY, JSON.stringify(authState));
+  else localStorage.removeItem(AUTH_KEY);
+}
+function decodeJwt(token){
+  try{
+    const payload = token.split('.')[1];
+    const json = decodeURIComponent(atob(payload.replace(/-/g,'+').replace(/_/g,'/')).split('').map(c=>
+      '%' + ('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+    return JSON.parse(json);
+  }catch(e){ return {}; }
+}
+function handleGoogleCredential(response){
+  const info = decodeJwt(response.credential);
+  authState = { idToken: response.credential, email: info.email, name: info.name, picture: info.picture };
+  persistAuthState();
+  renderAccountArea();
+  showToast("Signed in as " + (info.email||""));
+  cloudLoadCurrentDoc();
+}
+function initGoogleSignIn(){
+  if(typeof google === 'undefined' || !google.accounts || !google.accounts.id) { setTimeout(initGoogleSignIn, 400); return; }
+  google.accounts.id.initialize({ client_id: OAUTH_CLIENT_ID, callback: handleGoogleCredential });
+  renderAccountArea();
+}
+function renderAccountArea(){
+  const area = document.getElementById('accountArea');
+  if(!area) return;
+  if(authState && authState.email){
+    const initial = (authState.name||authState.email||"?").charAt(0).toUpperCase();
+    area.innerHTML = `<div class="account-chip" id="accountChip" title="${escapeHtml(authState.email)} — click to sign out">
+      ${authState.picture ? `<img src="${authState.picture}" referrerpolicy="no-referrer">` : `<div class="avatar-fallback">${initial}</div>`}
+      <span>${escapeHtml((authState.name||authState.email||"").split(' ')[0])}</span>
+    </div>`;
+    document.getElementById('accountChip').onclick = ()=>{
+      if(confirm("Sign out of Pro Sheet cloud sync?")){
+        authState = null; persistAuthState(); renderAccountArea();
+        setSaveStatus("Signed out — saving locally only", "");
+      }
+    };
+  } else {
+    area.innerHTML = `<div id="gsiBtnHolder"></div>`;
+    if(typeof google !== 'undefined' && google.accounts && google.accounts.id){
+      google.accounts.id.renderButton(document.getElementById('gsiBtnHolder'), { theme:'filled_black', size:'medium', shape:'pill', text:'signin' });
+    }
+  }
+}
+function setSaveStatus(text, cls){
+  const el = document.getElementById('saveStatus');
+  el.textContent = text;
+  el.className = 'save-status' + (cls ? ' '+cls : '');
+}
+function cloudCall(action, data){
+  if(!authState || !authState.idToken) return Promise.reject(new Error("Not signed in"));
+  return fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' }, // avoids CORS preflight, matches Pro Document pattern
+    body: JSON.stringify({ idToken: authState.idToken, action, data: data||{} })
+  }).then(r=>r.json()).then(res=>{
+    if(!res.ok) throw new Error(res.error||"Cloud sync error");
+    return res.result;
+  });
+}
+function cloudSaveCurrentDoc(){
+  if(!authState) return;
+  const payload = {
+    id: DOC_ID,
+    name: document.getElementById('filename').value || "Untitled spreadsheet",
+    json: JSON.stringify(workbook),
+    updatedAt: Date.now()
+  };
+  setSaveStatus("Syncing to cloud…", "syncing");
+  cloudCall('save', payload).then(res=>{
+    lastCloudSyncedAt = res.updatedAt || Date.now();
+    setSaveStatus("Synced to cloud", "synced");
+  }).catch(err=>{
+    setSaveStatus("Cloud sync failed — saved locally", "error");
+  });
+}
+function cloudLoadCurrentDoc(){
+  if(!authState) return;
+  cloudCall('get', {id: DOC_ID}).then(res=>{
+    if(res && res.json){
+      const cloudWb = JSON.parse(res.json);
+      // Only overwrite local if the cloud copy is newer than what we have locally
+      const localRaw = localStorage.getItem(STORAGE_KEY);
+      const localTime = localRaw ? (JSON.parse(localRaw).lastSavedAt||0) : 0;
+      if(!res.updatedAt || res.updatedAt >= localTime){
+        workbook = cloudWb;
+        if(!workbook.sheets[workbook.current]) workbook.current = workbook.order[0];
+        document.getElementById('filename').value = workbook.filename || "Untitled spreadsheet";
+        computedCache = {};
+        renderAll();
+        setSaveStatus("Loaded from cloud", "synced");
+      }
+    }
+  }).catch(()=>{ /* no cloud copy yet, or offline — keep local version */ });
+}
+function scheduleCloudSync(){
+  if(!authState) return;
+  clearTimeout(cloudSyncTimer);
+  cloudSyncTimer = setTimeout(cloudSaveCurrentDoc, 1200);
+}
+
 /* ================= STATE ================= */
 let workbook = {
   sheets: {
@@ -535,9 +672,10 @@ function showToast(msg){
   clearTimeout(t._timer); t._timer = setTimeout(()=>t.classList.remove('show'), 1800);
 }
 function markDirty(){
-  document.getElementById('saveStatus').textContent = "Unsaved changes";
+  setSaveStatus("Unsaved changes", "");
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveWorkbook, 900);
+  scheduleCloudSync();
 }
 
 /* ================= UNDO/REDO ================= */
@@ -605,6 +743,7 @@ function excelDateSerial(v){
   const d = new Date(v);
   return isNaN(d.getTime()) ? null : d;
 }
+function daysBetween(d1,d2){ return Math.round((d2.getTime()-d1.getTime())/86400000); }
 const FN = {
   SUM: (...a)=>flatten(a).map(toNum).filter(n=>!isNaN(n)).reduce((x,y)=>x+y,0),
   AVERAGE: (...a)=>{ const n=flatten(a).map(toNum).filter(n=>!isNaN(n)); return n.length? n.reduce((x,y)=>x+y,0)/n.length : 0; },
@@ -613,6 +752,7 @@ const FN = {
   MAX: (...a)=>{ const n=flatten(a).map(toNum).filter(n=>!isNaN(n)); return n.length? Math.max(...n):0; },
   COUNT: (...a)=>flatten(a).map(toNum).filter(n=>!isNaN(n)).length,
   COUNTA: (...a)=>flatten(a).filter(v=>v!==""&&v!==null&&v!==undefined).length,
+  COUNTBLANK: (...a)=>flatten(a).filter(v=>v===""||v===null||v===undefined).length,
   COUNTIF: (range,crit)=>{
     const arr = flatten([range]);
     return arr.filter(v=>matchCriteria(v,crit)).length;
@@ -631,12 +771,54 @@ const FN = {
     arr.forEach((v,i)=>{ if(matchCriteria(v,crit)){ total += (toNum(avgArr[i])||0); count++; } });
     return count? total/count : 0;
   },
+  STDEV: (...a)=>{
+    const n=flatten(a).map(toNum).filter(x=>!isNaN(x));
+    if(n.length<2) return 0;
+    const mean=n.reduce((x,y)=>x+y,0)/n.length;
+    const variance=n.reduce((s,v)=>s+Math.pow(v-mean,2),0)/(n.length-1);
+    return Math.sqrt(variance);
+  },
+  STDEVP: (...a)=>{
+    const n=flatten(a).map(toNum).filter(x=>!isNaN(x));
+    if(!n.length) return 0;
+    const mean=n.reduce((x,y)=>x+y,0)/n.length;
+    const variance=n.reduce((s,v)=>s+Math.pow(v-mean,2),0)/n.length;
+    return Math.sqrt(variance);
+  },
+  VARIANCE: (...a)=>{
+    const n=flatten(a).map(toNum).filter(x=>!isNaN(x));
+    if(n.length<2) return 0;
+    const mean=n.reduce((x,y)=>x+y,0)/n.length;
+    return n.reduce((s,v)=>s+Math.pow(v-mean,2),0)/(n.length-1);
+  },
+  VARP: (...a)=>{
+    const n=flatten(a).map(toNum).filter(x=>!isNaN(x));
+    if(!n.length) return 0;
+    const mean=n.reduce((x,y)=>x+y,0)/n.length;
+    return n.reduce((s,v)=>s+Math.pow(v-mean,2),0)/n.length;
+  },
+  MODE: (...a)=>{
+    const n=flatten(a).map(toNum).filter(x=>!isNaN(x));
+    if(!n.length) return 0;
+    const counts={};
+    n.forEach(v=>counts[v]=(counts[v]||0)+1);
+    let best=n[0],bestCount=0;
+    Object.keys(counts).forEach(k=>{ if(counts[k]>bestCount){bestCount=counts[k]; best=parseFloat(k);} });
+    return best;
+  },
   IF: (cond,t,f)=> cond?t:f,
+  IFS: (...a)=>{ for(let i=0;i<a.length;i+=2){ if(a[i]) return a[i+1]; } return "#N/A"; },
   IFERROR: (v,fallback)=>{ const s=String(v); return (s.startsWith('#')) ? fallback : v; },
   AND: (...a)=>flatten(a).every(Boolean),
   OR: (...a)=>flatten(a).some(Boolean),
   NOT: (a)=>!a,
   CONCATENATE: (...a)=>flatten(a).join(""),
+  CONCAT: (...a)=>flatten(a).join(""),
+  TEXTJOIN: (delim,ignoreEmpty,...a)=>{
+    let arr = flatten(a);
+    if(ignoreEmpty) arr = arr.filter(v=>v!==""&&v!==null&&v!==undefined);
+    return arr.join(delim);
+  },
   TEXT: (v,fmt)=>{
     const n = toNum(v);
     if(fmt && /0/.test(fmt) && !isNaN(n)){
@@ -660,13 +842,60 @@ const FN = {
   MONTH: (v)=>{ const d=excelDateSerial(v); return d? d.getMonth()+1 : "#ERROR!"; },
   DAY: (v)=>{ const d=excelDateSerial(v); return d? d.getDate() : "#ERROR!"; },
   DATE: (y,m,d)=>{ const dt=new Date(y,m-1,d); return dt.toISOString().slice(0,10); },
+  WEEKDAY: (v,type)=>{
+    const d=excelDateSerial(v); if(!d) return "#ERROR!";
+    let day=d.getDay(); // 0=Sun
+    type = type||1;
+    if(type===1) return day+1; // 1=Sun..7=Sat
+    if(type===2) return day===0?7:day; // 1=Mon..7=Sun
+    if(type===3) return day===0?6:day-1; // 0=Mon..6=Sun
+    return day+1;
+  },
+  EDATE: (v,months)=>{
+    const d=excelDateSerial(v); if(!d) return "#ERROR!";
+    const nd=new Date(d); nd.setMonth(nd.getMonth()+parseInt(months,10));
+    return nd.toISOString().slice(0,10);
+  },
+  EOMONTH: (v,months)=>{
+    const d=excelDateSerial(v); if(!d) return "#ERROR!";
+    const nd=new Date(d.getFullYear(), d.getMonth()+parseInt(months,10)+1, 0);
+    return nd.toISOString().slice(0,10);
+  },
+  DATEDIF: (start,end,unit)=>{
+    const d1=excelDateSerial(start), d2=excelDateSerial(end);
+    if(!d1||!d2) return "#ERROR!";
+    unit = (unit||"D").toUpperCase();
+    if(unit==="D") return daysBetween(d1,d2);
+    if(unit==="M") return (d2.getFullYear()-d1.getFullYear())*12 + (d2.getMonth()-d1.getMonth());
+    if(unit==="Y") return d2.getFullYear()-d1.getFullYear();
+    return daysBetween(d1,d2);
+  },
+  NETWORKDAYS: (start,end)=>{
+    const d1=excelDateSerial(start), d2=excelDateSerial(end);
+    if(!d1||!d2) return "#ERROR!";
+    let count=0; const cur=new Date(Math.min(d1,d2)); const last=new Date(Math.max(d1,d2));
+    while(cur<=last){ const dow=cur.getDay(); if(dow!==0 && dow!==6) count++; cur.setDate(cur.getDate()+1); }
+    return count;
+  },
   LEN: (s)=>String(s).length,
   UPPER: (s)=>String(s).toUpperCase(),
   LOWER: (s)=>String(s).toLowerCase(),
-  TRIM: (s)=>String(s).trim(),
+  PROPER: (s)=>String(s).replace(/\w\S*/g, t=>t.charAt(0).toUpperCase()+t.substr(1).toLowerCase()),
+  TRIM: (s)=>String(s).trim().replace(/\s+/g,' '),
   LEFT: (s,n)=>String(s).slice(0, n===undefined?1:n),
   RIGHT: (s,n)=>{ s=String(s); n=n===undefined?1:n; return s.slice(Math.max(0,s.length-n)); },
   MID: (s,start,len)=>String(s).slice(start-1, start-1+len),
+  REPT: (s,n)=>String(s).repeat(Math.max(0,parseInt(n,10)||0)),
+  SUBSTITUTE: (s,find,repl)=>String(s).split(find).join(repl),
+  SPLIT: (s,delim)=>String(s).split(delim===undefined?",":delim),
+  FIND: (find,within,start)=>{
+    const idx = String(within).indexOf(String(find), (start||1)-1);
+    return idx===-1 ? "#N/A" : idx+1;
+  },
+  SEARCH: (find,within,start)=>{
+    const idx = String(within).toLowerCase().indexOf(String(find).toLowerCase(), (start||1)-1);
+    return idx===-1 ? "#N/A" : idx+1;
+  },
   PI: ()=>Math.PI,
   VLOOKUP: (needle, table, colIdx, exact)=>{
     // table is a 2D array produced from a range like A1:C10
@@ -679,6 +908,26 @@ const FN = {
       } else {
         if(String(key)===String(needle)) return row[colIdx-1];
       }
+    }
+    return "#N/A";
+  },
+  HLOOKUP: (needle, table, rowIdx, exact)=>{
+    if(!Array.isArray(table)) return "#ERROR!";
+    const rows = Array.isArray(table[0]) ? table : [table];
+    const headerRow = rows[0];
+    for(let i=0;i<headerRow.length;i++){
+      if(String(headerRow[i])===String(needle)){
+        const targetRow = rows[rowIdx-1];
+        return targetRow ? targetRow[i] : "#N/A";
+      }
+    }
+    return "#N/A";
+  },
+  XLOOKUP: (needle, lookupArr, returnArr)=>{
+    const lookup = flatten([lookupArr]);
+    const ret = flatten([returnArr]);
+    for(let i=0;i<lookup.length;i++){
+      if(String(lookup[i])===String(needle)) return ret[i];
     }
     return "#N/A";
   },
@@ -1424,26 +1673,89 @@ function doUnmerge(){
   renderAll(); markDirty();
 }
 
-/* Color pickers */
-function buildSwatchPop(popEl, onPick, includeNone){
+/* Color pickers — swatch grid + recent colors (last 8 used) + opacity slider */
+const RECENT_KEY_TEXT = "prosheet_recent_text_colors";
+const RECENT_KEY_FILL = "prosheet_recent_fill_colors";
+function loadRecentColors(key){ try{ return JSON.parse(localStorage.getItem(key))||[]; }catch(e){ return []; } }
+function pushRecentColor(key, color){
+  if(!color || color==='transparent') return;
+  let list = loadRecentColors(key);
+  list = list.filter(c=>c.toLowerCase()!==color.toLowerCase());
+  list.unshift(color);
+  list = list.slice(0,8);
+  localStorage.setItem(key, JSON.stringify(list));
+}
+function hexToRgba(hex, alpha){
+  hex = hex.replace('#','');
+  if(hex.length===3) hex = hex.split('').map(c=>c+c).join('');
+  const r = parseInt(hex.slice(0,2),16), g = parseInt(hex.slice(2,4),16), b = parseInt(hex.slice(4,6),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+function buildSwatchPop(popEl, onPick, includeNone, recentKey){
   popEl.innerHTML = '<div class="swatch-grid"></div>';
   const grid = popEl.querySelector('.swatch-grid');
   COLORS.filter(c=>c!=='transparent').forEach(c=>{
     const sw = document.createElement('div');
     sw.className='swatch'; sw.style.background=c; sw.title=c;
-    sw.onclick = ()=>{ onPick(c); popEl.classList.remove('show'); };
+    sw.onclick = ()=>{ applyPick(c); };
     grid.appendChild(sw);
   });
   const custom = document.createElement('div');
   custom.className='swatch-custom';
   custom.innerHTML = `<input type="color" value="#6c8cff"><span style="font-size:11px;color:var(--text-dim)">Custom</span>`;
-  custom.querySelector('input').oninput = (e)=>{ onPick(e.target.value); popEl.classList.remove('show'); };
+  const customInput = custom.querySelector('input');
+  customInput.oninput = (e)=>{ applyPick(e.target.value); };
   grid.parentElement.appendChild(custom);
+
+  // opacity slider — applies to whatever color is currently picked (base hex kept on the popup)
+  const opacityWrap = document.createElement('div');
+  opacityWrap.className = 'swatch-opacity-wrap';
+  opacityWrap.innerHTML = `<span style="font-size:10px;color:var(--text-dim);">Opacity</span><input type="range" min="10" max="100" value="100" class="opacityRange"><span class="opacity-val">100%</span>`;
+  grid.parentElement.appendChild(opacityWrap);
+  const opacityRange = opacityWrap.querySelector('.opacityRange');
+  const opacityVal = opacityWrap.querySelector('.opacity-val');
+  popEl._lastBaseColor = popEl._lastBaseColor || "#6c8cff";
+  opacityRange.oninput = ()=>{
+    opacityVal.textContent = opacityRange.value + "%";
+    const alpha = (parseInt(opacityRange.value,10)/100).toFixed(2);
+    const finalColor = popEl._lastBaseColor.startsWith('#') ? hexToRgba(popEl._lastBaseColor, alpha) : popEl._lastBaseColor;
+    onPick(finalColor);
+    if(recentKey) pushRecentColor(recentKey, popEl._lastBaseColor);
+  };
+
+  function applyPick(c){
+    popEl._lastBaseColor = c;
+    opacityRange.value = 100; opacityVal.textContent = "100%";
+    onPick(c);
+    if(recentKey) pushRecentColor(recentKey, c);
+    popEl.classList.remove('show');
+  }
+
   if(includeNone){
     const none = document.createElement('div');
     none.className='swatch-none'; none.textContent='No fill';
     none.onclick = ()=>{ onPick('transparent'); popEl.classList.remove('show'); };
     grid.parentElement.appendChild(none);
+  }
+
+  // recent colors row, most-recently-used first
+  if(recentKey){
+    const recent = loadRecentColors(recentKey);
+    if(recent.length){
+      const label = document.createElement('div');
+      label.className = 'swatch-recent-label';
+      label.textContent = 'Recent';
+      grid.parentElement.insertBefore(label, custom);
+      const recentGrid = document.createElement('div');
+      recentGrid.className = 'swatch-grid';
+      recent.forEach(c=>{
+        const sw = document.createElement('div');
+        sw.className='swatch'; sw.style.background=c; sw.title=c;
+        sw.onclick = ()=>{ applyPick(c); };
+        recentGrid.appendChild(sw);
+      });
+      grid.parentElement.insertBefore(recentGrid, custom);
+    }
   }
 }
 const textColorPop = document.getElementById('textColorPop');
@@ -1451,13 +1763,13 @@ const fillColorPop = document.getElementById('fillColorPop');
 buildSwatchPop(textColorPop, (c)=>{
   applyFormat(f=>f.color=c);
   document.getElementById('textColorCurrent').style.background=c;
-}, false);
+}, false, RECENT_KEY_TEXT);
 buildSwatchPop(fillColorPop, (c)=>{
   applyFormat(f=>f.bg=c);
   document.getElementById('fillColorCurrent').style.background=c;
-}, true);
-document.getElementById('textColorBtn').onclick = (e)=>{ e.stopPropagation(); closeAllPops(); textColorPop.classList.toggle('show'); };
-document.getElementById('fillColorBtn').onclick = (e)=>{ e.stopPropagation(); closeAllPops(); fillColorPop.classList.toggle('show'); };
+}, true, RECENT_KEY_FILL);
+document.getElementById('textColorBtn').onclick = (e)=>{ e.stopPropagation(); closeAllPops(); buildSwatchPop(textColorPop,(c)=>{applyFormat(f=>f.color=c);document.getElementById('textColorCurrent').style.background=c;}, false, RECENT_KEY_TEXT); textColorPop.classList.toggle('show'); };
+document.getElementById('fillColorBtn').onclick = (e)=>{ e.stopPropagation(); closeAllPops(); buildSwatchPop(fillColorPop,(c)=>{applyFormat(f=>f.bg=c);document.getElementById('fillColorCurrent').style.background=c;}, true, RECENT_KEY_FILL); fillColorPop.classList.toggle('show'); };
 function closeAllPops(){ textColorPop.classList.remove('show'); fillColorPop.classList.remove('show'); }
 document.addEventListener('click', ()=>{ closeAllPops(); closeAllMenus(); });
 
@@ -1890,300 +2202,4 @@ function addSheet(){
   workbook.current = name;
   selection={r1:0,c1:0,r2:0,c2:0}; active={r:0,c:0};
   computedCache={}; renderAll(); markDirty();
-  return name;
-}
-document.getElementById('addSheetBtn').onclick = addSheet;
-
-/* Add several sheets at once, e.g. "Jan, Feb, Mar" or "Sheet1..Sheet5" */
-function openAddMultipleSheetsDialog(){
-  showDialog(`
-    <h3>Add multiple sheets</h3>
-    <label>How many sheets?</label>
-    <input id="dlgSheetCount" type="number" min="1" max="50" value="3">
-    <label>Names (comma-separated, optional — overrides count)</label>
-    <input id="dlgSheetNames" placeholder="e.g. Jan, Feb, Mar">
-    <div class="dialog-actions">
-      <button class="btn" id="dlgCancel">Cancel</button>
-      <button class="btn primary" id="dlgOk">Add sheets</button>
-    </div>
-  `);
-  document.getElementById('dlgCancel').onclick = closeDialog;
-  document.getElementById('dlgOk').onclick = ()=>{
-    const namesRaw = document.getElementById('dlgSheetNames').value.trim();
-    let names = [];
-    if(namesRaw){
-      names = namesRaw.split(',').map(s=>s.trim()).filter(Boolean);
-    } else {
-      const count = clamp(parseInt(document.getElementById('dlgSheetCount').value,10) || 1, 1, 50);
-      for(let i=0;i<count;i++) names.push(null); // auto-named
-    }
-    pushUndo();
-    let lastName = null;
-    names.forEach(n=>{
-      let name = n;
-      if(!name){
-        let k=1; name = "Sheet"+(workbook.order.length+1);
-        while(workbook.sheets[name]){ k++; name="Sheet"+(workbook.order.length+k); }
-      } else if(workbook.sheets[name]){
-        let k=2; const base=name;
-        while(workbook.sheets[name]){ name = base+"_"+k; k++; }
-      }
-      workbook.sheets[name] = makeSheet();
-      workbook.order.push(name);
-      lastName = name;
-    });
-    if(lastName) workbook.current = lastName;
-    selection={r1:0,c1:0,r2:0,c2:0}; active={r:0,c:0};
-    computedCache={}; renderAll(); markDirty(); closeDialog();
-    showToast(`Added ${names.length} sheet(s)`);
-  };
-}
-
-function renameSheetPrompt(name){
-  showDialog(`
-    <h3>Rename sheet</h3>
-    <label>Sheet name</label><input id="dlgSheetName" value="${escapeHtml(name)}">
-    <div class="dialog-actions"><button class="btn" id="dlgCancel">Cancel</button><button class="btn primary" id="dlgOk">Rename</button></div>
-  `);
-  document.getElementById('dlgCancel').onclick = closeDialog;
-  document.getElementById('dlgOk').onclick = ()=>{
-    const newName = document.getElementById('dlgSheetName').value.trim();
-    if(newName && !workbook.sheets[newName]){
-      workbook.sheets[newName] = workbook.sheets[name];
-      delete workbook.sheets[name];
-      workbook.order = workbook.order.map(n=>n===name?newName:n);
-      if(workbook.current===name) workbook.current=newName;
-      renderAll(); markDirty();
-    }
-    closeDialog();
-  };
-}
-function renameOrDeleteSheet(name){
-  showDialog(`
-    <h3>${escapeHtml(name)}</h3>
-    <div class="dialog-actions">
-      <button class="btn" id="dlgRename">Rename</button>
-      <button class="btn" id="dlgDuplicate">Duplicate</button>
-      <button class="btn" id="dlgDelete" style="color:var(--danger)">Delete</button>
-    </div>
-  `);
-  document.getElementById('dlgRename').onclick = ()=>{ closeDialog(); renameSheetPrompt(name); };
-  document.getElementById('dlgDuplicate').onclick = ()=>{ closeDialog(); workbook.current=name; duplicateSheet(); };
-  document.getElementById('dlgDelete').onclick = ()=>{
-    if(workbook.order.length<=1){ showToast("Can't delete the only sheet"); closeDialog(); return; }
-    delete workbook.sheets[name];
-    workbook.order = workbook.order.filter(n=>n!==name);
-    if(workbook.current===name) workbook.current = workbook.order[0];
-    closeDialog(); computedCache={}; renderAll(); markDirty();
-  };
-}
-
-/* ================= IMPORT / EXPORT ================= */
-function exportCsv(){
-  const s = sheet();
-  let maxC = 0;
-  Object.keys(s.data).forEach(id=>{ const p=parseId(id); if(p.c>maxC) maxC=p.c; });
-  let lines = [];
-  for(let r=0;r<s.rows;r++){
-    let hasContent=false;
-    const row=[];
-    for(let c=0;c<=maxC;c++){
-      const v = evaluateCell(cellId(c,r));
-      if(v!=="") hasContent=true;
-      row.push(csvEscape(v));
-    }
-    if(hasContent || lines.length>0) lines.push(row.join(","));
-  }
-  downloadFile(lines.join("\n"), (document.getElementById('filename').value||"sheet")+".csv", "text/csv");
-}
-function csvEscape(v){
-  v = String(v ?? "");
-  if(v.includes(',')||v.includes('"')||v.includes('\n')) return '"'+v.replace(/"/g,'""')+'"';
-  return v;
-}
-function exportJson(){
-  downloadFile(JSON.stringify(workbook,null,2), (document.getElementById('filename').value||"sheet")+".json", "application/json");
-}
-
-/* --- Excel (.xlsx) export: writes EVERY sheet in the workbook into one
-   real Excel file, each Pro Sheet tab becoming its own Excel worksheet,
-   including merged cell ranges. Requires the SheetJS (xlsx) library. --- */
-function exportXlsx(){
-  if(typeof XLSX === 'undefined'){ showToast("Excel library failed to load — check your connection"); return; }
-  const wb = XLSX.utils.book_new();
-  workbook.order.forEach(name=>{
-    const sh = workbook.sheets[name];
-    let maxC = 0;
-    Object.keys(sh.data).forEach(id=>{ const p=parseId(id); if(p.c>maxC) maxC=p.c; });
-    const cache = {};
-    const aoa = [];
-    for(let r=0; r<sh.rows; r++){
-      const row = [];
-      let rowHasData = false;
-      for(let c=0; c<=maxC; c++){
-        const id = cellId(c,r);
-        const v = evaluateCellInSheet(name, id, cache);
-        if(v!=="") rowHasData = true;
-        row.push(v);
-      }
-      if(rowHasData || aoa.length>0) aoa.push(row);
-    }
-    const ws = XLSX.utils.aoa_to_sheet(aoa.length ? aoa : [[""]]);
-    if(sh.merges && sh.merges.length){
-      ws['!merges'] = sh.merges.map(m=>({ s:{r:m.r1,c:m.c1}, e:{r:m.r2,c:m.c2} }));
-    }
-    // Excel sheet names: max 31 chars, no []:*?/\\
-    let safeName = name.replace(/[\[\]:*?\/\\]/g,'').slice(0,31) || "Sheet";
-    XLSX.utils.book_append_sheet(wb, ws, safeName);
-  });
-  XLSX.writeFile(wb, (document.getElementById('filename').value||"sheet")+".xlsx");
-  showToast("Downloaded Excel workbook ("+workbook.order.length+" sheet"+(workbook.order.length>1?'s':'')+")");
-}
-
-function downloadFile(content, name, type){
-  const blob = new Blob([content], {type});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = name; a.click();
-  URL.revokeObjectURL(url);
-  showToast("Downloaded "+name);
-}
-document.getElementById('csvFileInput')?.remove();
-const csvInput = document.createElement('input');
-csvInput.type='file'; csvInput.accept='.csv'; csvInput.id='csvFileInput'; csvInput.style.display='none';
-document.body.appendChild(csvInput);
-csvInput.addEventListener('change', (e)=>{
-  const file = e.target.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = (ev)=>{
-    pushUndo();
-    const text = ev.target.result;
-    const rows = parseCsv(text);
-    addSheet();
-    const s = sheet();
-    s.rows = Math.max(DEFAULT_ROWS, rows.length+5);
-    rows.forEach((row,ri)=>{
-      row.forEach((val,ci)=>{
-        if(ci<COLS) ensureCell(cellId(ci,ri)).v = val;
-      });
-    });
-    computedCache={}; renderAll(); markDirty();
-    showToast("CSV imported");
-  };
-  reader.readAsText(file);
-  csvInput.value = "";
-});
-function parseCsv(text){
-  const rows = [];
-  let row=[], field="", inQuotes=false;
-  for(let i=0;i<text.length;i++){
-    const ch = text[i];
-    if(inQuotes){
-      if(ch === '"'){ if(text[i+1]==='"'){ field+='"'; i++; } else inQuotes=false; }
-      else field+=ch;
-    } else {
-      if(ch === '"') inQuotes=true;
-      else if(ch === ','){ row.push(field); field=""; }
-      else if(ch === '\n'){ row.push(field); rows.push(row); row=[]; field=""; }
-      else if(ch === '\r'){}
-      else field+=ch;
-    }
-  }
-  if(field.length || row.length){ row.push(field); rows.push(row); }
-  return rows;
-}
-
-/* --- Excel (.xlsx) import: reads EVERY worksheet from the uploaded file
-   and rebuilds the whole Pro Sheet workbook, one tab per Excel sheet,
-   including merged cell ranges. Replaces the current workbook. --- */
-const xlsxInput = document.createElement('input');
-xlsxInput.type='file'; xlsxInput.accept='.xlsx,.xls'; xlsxInput.id='xlsxFileInput'; xlsxInput.style.display='none';
-document.body.appendChild(xlsxInput);
-xlsxInput.addEventListener('change', (e)=>{
-  const file = e.target.files[0];
-  if(!file) return;
-  if(typeof XLSX === 'undefined'){ showToast("Excel library failed to load — check your connection"); xlsxInput.value=""; return; }
-  const reader = new FileReader();
-  reader.onload = (ev)=>{
-    try{
-      pushUndo();
-      const data = new Uint8Array(ev.target.result);
-      const xwb = XLSX.read(data, {type:'array'});
-      const newSheets = {}, order = [];
-      xwb.SheetNames.forEach(sname=>{
-        const ws = xwb.Sheets[sname];
-        const aoa = XLSX.utils.sheet_to_json(ws, {header:1, raw:false, defval:""});
-        const newSheet = makeSheet();
-        aoa.forEach((row,ri)=>{
-          row.forEach((val,ci)=>{
-            if(ci<COLS && val!=="" && val!==null && val!==undefined){
-              newSheet.data[cellId(ci,ri)] = {v:String(val), f:{}};
-            }
-          });
-        });
-        newSheet.rows = Math.max(DEFAULT_ROWS, aoa.length+5);
-        if(ws['!merges']){
-          newSheet.merges = ws['!merges'].map(m=>({r1:m.s.r,c1:m.s.c,r2:m.e.r,c2:m.e.c}));
-        }
-        let uniqueName = sname || ("Sheet"+(order.length+1));
-        if(newSheets[uniqueName]){
-          let base = uniqueName, k=2;
-          while(newSheets[uniqueName]){ uniqueName = base+"_"+k; k++; }
-        }
-        newSheets[uniqueName] = newSheet;
-        order.push(uniqueName);
-      });
-      if(!order.length){ showToast("No sheets found in file"); return; }
-      workbook.sheets = newSheets;
-      workbook.order = order;
-      workbook.current = order[0];
-      selection={r1:0,c1:0,r2:0,c2:0}; active={r:0,c:0};
-      computedCache={}; renderAll(); markDirty();
-      showToast(`Excel file imported (${order.length} sheet${order.length>1?'s':''})`);
-    }catch(err){
-      showToast("Couldn't read that Excel file");
-    }
-  };
-  reader.readAsArrayBuffer(file);
-  xlsxInput.value = "";
-});
-
-/* ================= SAVE / LOAD ================= */
-function saveWorkbook(manual){
-  try{
-    workbook.filename = document.getElementById('filename').value;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(workbook));
-    registerInIndex(DOC_ID, workbook.filename || "Untitled spreadsheet", false);
-    document.getElementById('saveStatus').textContent = "All changes saved";
-    document.title = (workbook.filename || "Untitled spreadsheet") + " — Pro Sheet";
-    if(manual) showToast("Saved");
-  }catch(e){ document.getElementById('saveStatus').textContent = "Save failed"; }
-}
-function loadWorkbook(){
-  try{
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if(raw){
-      const parsed = JSON.parse(raw);
-      workbook = parsed;
-      document.getElementById('filename').value = workbook.filename || "Untitled spreadsheet";
-    }
-  }catch(e){ /* ignore */ }
-}
-document.getElementById('saveBtn').onclick = ()=>saveWorkbook(true);
-document.getElementById('filename').addEventListener('input', markDirty);
-document.getElementById('filename').addEventListener('keydown', (e)=>{ if(e.key==='Enter') e.target.blur(); });
-
-/* ================= INIT ================= */
-loadWorkbook();
-if(!workbook.sheets[workbook.current]) workbook.current = workbook.order[0];
-registerInIndex(DOC_ID, workbook.filename || "Untitled spreadsheet", false);
-document.title = (workbook.filename || "Untitled spreadsheet") + " — Pro Sheet";
-renderAll();
-syncUndoRedoButtons();
-gridEl.setAttribute('tabindex','0');
-
-})();
-</script>
-</body>
-</html>
+ 
