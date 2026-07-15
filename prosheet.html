@@ -303,6 +303,7 @@ td.cell.active-cell{
 .script-file:hover{background:var(--surface-2);color:var(--text);}
 .script-file.active{background:var(--accent-soft);color:var(--accent);border-left-color:var(--accent);}
 .script-file .fdot{width:6px;height:6px;border-radius:50%;background:var(--amber);flex-shrink:0;}
+.script-file .fdot.html{background:#6cc8ff;}
 .script-file .fname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .script-file .fdel{opacity:0;font-size:14px;color:var(--text-faint);padding:0 3px;}
 .script-file:hover .fdel{opacity:1;}
@@ -334,6 +335,22 @@ td.cell.active-cell{
 .script-log-line.success{color:var(--success);}
 .script-log-line.error{color:var(--danger);}
 .script-log-line .ts{color:var(--text-faint);margin-right:8px;}
+
+/* ============ WEB APP PREVIEW ============ */
+.preview-overlay{align-items:stretch;justify-content:stretch;}
+.preview-frame-wrap{
+  width:100%;height:100%;background:#fff;display:flex;flex-direction:column;
+}
+.preview-topbar{
+  display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--header-bg);
+  border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.preview-topbar .furl{
+  flex:1;font-family:'DM Mono',monospace;font-size:11.5px;color:var(--text-dim);
+  background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 10px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+#previewFrame{flex:1;width:100%;border:none;background:#fff;}
 </style>
 </head>
 <body>
@@ -503,6 +520,7 @@ td.cell.active-cell{
       <div class="script-title"><div class="mark">Gs</div>Apps Script<span class="proj" id="scriptProjName">— Untitled spreadsheet</span></div>
       <select class="tselect" id="scriptFnSelect" title="Function to run"></select>
       <button class="btn primary" id="scriptRunBtn">▶ Run</button>
+      <button class="btn" id="scriptPreviewBtn" title="Preview doGet() as a web app">◱ Preview</button>
       <button class="btn" id="scriptSaveBtn">Save</button>
       <button class="btn" id="scriptDeployBtn" style="background:linear-gradient(135deg,var(--accent),#9b6cff);border:none;color:#0b0d13;font-weight:700;">⇪ Deploy</button>
       <span class="script-run-status" id="scriptRunStatus"></span>
@@ -511,7 +529,7 @@ td.cell.active-cell{
     </div>
     <div class="script-body">
       <div class="script-sidebar">
-        <div class="script-sidebar-head">Files <span class="tab-add" id="scriptAddFile" title="Add script file">+</span></div>
+        <div class="script-sidebar-head">Files <span class="tab-add" id="scriptAddFile" title="Add .gs or .html file">+</span></div>
         <div id="scriptFileList"></div>
       </div>
       <div class="script-editor-wrap">
@@ -523,6 +541,16 @@ td.cell.active-cell{
       <div class="script-console-head">Execution log <span id="scriptClearLog">Clear</span></div>
       <div id="scriptLog"></div>
     </div>
+  </div>
+</div>
+
+<div class="overlay preview-overlay" id="previewOverlay">
+  <div class="preview-frame-wrap">
+    <div class="preview-topbar">
+      <div class="furl" id="previewUrl">Local preview — doGet()</div>
+      <button class="btn" id="previewCloseBtn">Close</button>
+    </div>
+    <iframe id="previewFrame" sandbox="allow-scripts allow-forms allow-modals"></iframe>
   </div>
 </div>
 
@@ -575,7 +603,7 @@ const COLORS = ["#e7e9ef","#8b90a3","#ff6b6b","#ffb454","#ffe066","#4ade80","#4d
 // Shared OAuth Client ID used across the Pro suite.
 const GOOGLE_CLIENT_ID = "384904424093-j1a6kupjerhjufurpvur4hbik6k90bla.apps.googleusercontent.com";
 // Paste the /exec URL of your deployed Code.gs Web App here.
-const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzz1KGMYKKGt2Xe4P0LMaOs3U4OAGOl4RW824KYtqVrCxBS1aqLJeimZR_VYjY78WZ3/exec";
+const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyP_LjQNDdoY2oMjCEip01BM1E6T9maO3LlPRMogNBJ0Q9EV_NaiY3Az0evbjoVfQo1/exec";
 let googleIdToken = null;
 let googleUser = null;
 let cloudSyncTimer = null;
@@ -1174,7 +1202,6 @@ gridEl.addEventListener('dblclick', (e)=>{
   const td = e.target.closest('td.cell');
   if(td){ startEdit(); }
 });
-
 function doFill(){
   const r1=dragStart.r, c1=dragStart.c;
   const sourceId = cellId(c1,r1);
@@ -1312,7 +1339,6 @@ document.addEventListener('paste', (e)=>{
   });
   computedCache={}; renderAll(); markDirty();
 });
-
 /* ================= FORMATTING ================= */
 function applyFormat(mutator){
   pushUndo();
@@ -1542,7 +1568,6 @@ function openFindReplace(){
     showToast(`Replaced in ${count} cell(s)`);
   };
 }
-
 /* ================= CHART ================= */
 function openChartDialog(){
   const r1=Math.min(selection.r1,selection.r2), r2=Math.max(selection.r1,selection.r2);
@@ -1752,7 +1777,6 @@ function parseCsv(text){
   if(field.length || row.length){ row.push(field); rows.push(row); }
   return rows;
 }
-
 /* ================= SAVE / LOAD ================= */
 function saveWorkbook(manual){
   try{
@@ -1784,6 +1808,9 @@ let userFunctionsCache = {};   // name -> callable, usable directly in cell form
 let triggerFnsCache = {};      // onOpen / onEdit compiled handlers
 let scriptEditing = null;      // filename currently open in the editor textarea
 
+function isHtmlFile(name){ return /\.html$/i.test(name); }
+function isGsFile(name){ return /\.gs$/i.test(name); }
+
 function ensureScript(){
   if(!workbook.script || !workbook.script.files){
     workbook.script = {
@@ -1810,20 +1837,45 @@ function onEdit(e) {
 // Custom function — usable directly in a cell, e.g. =DOUBLE(A1)
 function DOUBLE(n) {
   return Number(n) * 2;
-}`
+}
+
+// doGet() is the entry point for the deployed web app.
+// It renders index.html — see the Files list for that file, just like
+// a real Google Apps Script web app project.
+function doGet() {
+  return HtmlService.createHtmlOutputFromFile('index')
+    .setTitle('My Web App')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}`,
+        "index.html":
+`<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body { font-family: sans-serif; padding: 24px; color: #222; }
+      h1 { font-size: 20px; }
+    </style>
+  </head>
+  <body>
+    <h1>Hello from your Apps Script web app!</h1>
+    <p>Edit this file (and Code.gs's doGet()) to build your UI, then hit Deploy.</p>
+  </body>
+</html>`
       },
-      order: ["Code.gs"],
+      order: ["Code.gs", "index.html"],
       current: "Code.gs"
     };
   }
   return workbook.script;
 }
 function compileScript(){
+  // Only .gs files are compiled into the JS runtime; .html files are served/rendered, not executed.
   const scr = ensureScript();
-  return scr.order.map(f=>scr.files[f]).join('\n\n');
+  return scr.order.filter(isGsFile).map(f=>scr.files[f]).join('\n\n');
 }
 
-/* ---- SpreadsheetApp / Logger / Browser / Utilities runtime ---- */
+/* ---- SpreadsheetApp / Logger / Browser / Utilities / HtmlService runtime ---- */
 function buildScriptAPI(){
   function parseA1Range(a1){
     a1 = String(a1).toUpperCase().trim();
@@ -1965,9 +2017,44 @@ function buildScriptAPI(){
     formatDate(date, tz, fmt){ try{ return new Date(date).toLocaleString(); }catch(e){ return String(date); } },
     sleep(){ /* no-op: synchronous sandbox */ }
   };
-  return {SpreadsheetApp, Logger, Browser, Utilities};
+  // HtmlService — mirrors the real Apps Script HtmlOutput builder, backed by the
+  // .html files stored in this project (see ensureScript()/scr.files).
+  function makeHtmlOutput(content){
+    let html = content;
+    let title = '';
+    return {
+      getContent(){ return html; },
+      setContent(c){ html = c; return this; },
+      append(c){ html += c; return this; },
+      setTitle(t){ title = t; return this; },
+      getTitle(){ return title; },
+      addMetaTag(){ return this; },          // no-op in the sandbox, kept for API parity
+      setXFrameOptionsMode(){ return this; }, // no-op in the sandbox
+      setWidth(){ return this; },
+      setHeight(){ return this; }
+    };
+  }
+  const HtmlService = {
+    createHtmlOutputFromFile(name){
+      const scr = ensureScript();
+      const fname = isHtmlFile(name) ? name : (name + '.html');
+      const content = scr.files[fname];
+      if(content === undefined) throw new Error('HtmlService: file "' + fname + '" not found in this project');
+      return makeHtmlOutput(content);
+    },
+    createHtmlOutput(html){ return makeHtmlOutput(html || ''); },
+    createTemplateFromFile(name){
+      const scr = ensureScript();
+      const fname = isHtmlFile(name) ? name : (name + '.html');
+      const content = scr.files[fname];
+      if(content === undefined) throw new Error('HtmlService: file "' + fname + '" not found in this project');
+      return {
+        evaluate(){ return makeHtmlOutput(content); }
+      };
+    }
+  };
+  return {SpreadsheetApp, Logger, Browser, Utilities, HtmlService};
 }
-
 /* ---- compiling user code into formula functions + triggers ---- */
 function extractFunctionNames(src){
   const names = [];
@@ -1980,7 +2067,7 @@ function recompileUserFunctions(){
   userFunctionsCache = {};
   try{
     const src = compileScript();
-    const names = extractFunctionNames(src).filter(n=>!RESERVED_TRIGGERS.includes(n));
+    const names = extractFunctionNames(src).filter(n=>!RESERVED_TRIGGERS.includes(n) && n!=='doGet' && n!=='doPost');
     if(!names.length) return;
     const body = src + `\n;return {${names.map(n=>`"${n}": (typeof ${n}==='function'?${n}:undefined)`).join(',')}};`;
     const fns = new Function(body)();
@@ -1992,9 +2079,9 @@ function recompileTriggers(){
   try{
     const src = compileScript();
     const api = buildScriptAPI();
-    const factory = new Function('SpreadsheetApp','Logger','Browser','Utilities',
+    const factory = new Function('SpreadsheetApp','Logger','Browser','Utilities','HtmlService',
       src + `\n;return {onOpen: typeof onOpen==='function'?onOpen:undefined, onEdit: typeof onEdit==='function'?onEdit:undefined};`);
-    triggerFnsCache = factory(api.SpreadsheetApp, api.Logger, api.Browser, api.Utilities) || {};
+    triggerFnsCache = factory(api.SpreadsheetApp, api.Logger, api.Browser, api.Utilities, api.HtmlService) || {};
   }catch(e){ triggerFnsCache = {}; }
 }
 function fireOnEdit(cellIdStr, oldValue, newValue){
@@ -2067,9 +2154,9 @@ function runScript(fnName, fromMenu){
   const statusEl = document.getElementById('scriptRunStatus');
   try{
     pushUndo();
-    const factory = new Function('SpreadsheetApp','Logger','Browser','Utilities',
+    const factory = new Function('SpreadsheetApp','Logger','Browser','Utilities','HtmlService',
       src + `\n;return typeof ${fnName}==='function' ? ${fnName} : null;`);
-    const fn = factory(api.SpreadsheetApp, api.Logger, api.Browser, api.Utilities);
+    const fn = factory(api.SpreadsheetApp, api.Logger, api.Browser, api.Utilities, api.HtmlService);
     if(typeof fn !== 'function'){
       appendLog(`Error: function "${fnName}" was not found`, 'error');
       if(statusEl) statusEl.textContent = 'Failed';
@@ -2087,8 +2174,46 @@ function runScript(fnName, fromMenu){
     if(!fromMenu) throw e;
   }
 }
+/* ---- local preview of doGet() as a web app, before deploying for real ---- */
+function previewWebApp(){
+  scriptSaveCurrentFile();
+  recompileTriggers();
+  recompileUserFunctions();
+  const src = compileScript();
+  const api = buildScriptAPI();
+  try{
+    const factory = new Function('SpreadsheetApp','Logger','Browser','Utilities','HtmlService',
+      src + `\n;return typeof doGet==='function' ? doGet : null;`);
+    const fn = factory(api.SpreadsheetApp, api.Logger, api.Browser, api.Utilities, api.HtmlService);
+    if(typeof fn !== 'function'){
+      appendLog('Error: no doGet() function found — add one to preview as a web app.', 'error');
+      showToast('No doGet() function found');
+      return;
+    }
+    const out = fn({});
+    const html = (out && typeof out.getContent === 'function') ? out.getContent() : String(out);
+    document.getElementById('previewUrl').textContent = 'Local preview — doGet()' + (out && out.getTitle && out.getTitle() ? (' · ' + out.getTitle()) : '');
+    document.getElementById('previewFrame').srcdoc = html;
+    document.getElementById('previewOverlay').classList.add('show');
+    appendLog('Rendered doGet() preview.', 'success');
+  }catch(e){
+    appendLog('Preview error: ' + e.message, 'error');
+    showToast('Preview failed — see execution log');
+  }
+}
+document.getElementById('scriptPreviewBtn').onclick = previewWebApp;
+document.getElementById('previewCloseBtn').onclick = ()=>{
+  document.getElementById('previewOverlay').classList.remove('show');
+  document.getElementById('previewFrame').srcdoc = '';
+};
+document.getElementById('previewOverlay').addEventListener('click', (e)=>{
+  if(e.target.id==='previewOverlay'){
+    document.getElementById('previewOverlay').classList.remove('show');
+    document.getElementById('previewFrame').srcdoc = '';
+  }
+});
 
-/* ---- deploy: push workbook data + script files to Google Drive via the GAS backend ---- */
+/* ---- deploy: push workbook data + script/html files to Google Drive + Apps Script via the GAS backend ---- */
 async function deployProject(){
   scriptSaveCurrentFile();
   if(!googleIdToken){ showToast('Sign in with Google first to deploy'); return; }
@@ -2109,9 +2234,14 @@ async function deployProject(){
     appendLog('Deployed successfully.', 'success');
     appendLog('Sheet: ' + result.sheetUrl, 'success');
     appendLog('Drive folder: ' + result.folderUrl, 'success');
+    if(result.webAppUrl){
+      appendLog('Web app URL: ' + result.webAppUrl, 'success');
+    } else if(result.webAppError){
+      appendLog('Web app deployment skipped: ' + result.webAppError, 'error');
+    }
     if(statusEl) statusEl.textContent = 'Deployed';
     showDeployResultDialog(result);
-    showToast('Deployed to Google Drive');
+    showToast(result.webAppUrl ? 'Deployed — web app URL ready' : 'Deployed to Google Drive');
   }catch(e){
     appendLog('Deploy failed: ' + e.message, 'error');
     if(statusEl) statusEl.textContent = 'Deploy failed';
@@ -2121,12 +2251,22 @@ async function deployProject(){
   }
 }
 function showDeployResultDialog(result){
+  const webAppSection = result.webAppUrl ? `
+    <label>Deployed web app URL</label>
+    <input id="dlgWebAppUrl" readonly value="${escapeHtml(result.webAppUrl)}" onclick="this.select()">
+  ` : `
+    <label>Web app URL</label>
+    <p style="font-size:11.5px;color:var(--text-faint);margin:2px 0 0;line-height:1.5;">${result.webAppError? escapeHtml(result.webAppError) : 'Not deployed as a web app yet — check the execution log.'}</p>
+  `;
   showDialog(`
     <h3>Deployed to Google Drive</h3>
-    <p style="font-size:12.5px;color:var(--text-dim);margin:0 0 14px;line-height:1.5;">Your spreadsheet data and Apps Script files were combined and saved to your Drive as a real Google Sheet plus its bound .gs script files.</p>
-    <div class="dialog-actions" style="justify-content:flex-start;flex-wrap:wrap;">
+    <p style="font-size:12.5px;color:var(--text-dim);margin:0 0 14px;line-height:1.5;">Your spreadsheet data and Apps Script (.gs and .html) files were combined and saved to your Drive as a real Google Sheet plus its bound script project.</p>
+    ${webAppSection}
+    <div class="dialog-actions" style="justify-content:flex-start;flex-wrap:wrap;margin-top:14px;">
       <a href="${result.sheetUrl}" target="_blank" class="btn primary" style="text-decoration:none;">Open Sheet</a>
       <a href="${result.folderUrl}" target="_blank" class="btn" style="text-decoration:none;">Open Drive folder</a>
+      ${result.webAppUrl? `<a href="${result.webAppUrl}" target="_blank" class="btn" style="text-decoration:none;">Open Web App</a>` : ''}
+      ${result.scriptEditorUrl? `<a href="${result.scriptEditorUrl}" target="_blank" class="btn" style="text-decoration:none;">Open Script Editor</a>` : ''}
     </div>
     <div class="dialog-actions"><button class="btn" id="dlgClose">Close</button></div>
   `);
@@ -2154,9 +2294,10 @@ function renderScriptFiles(){
   const list = document.getElementById('scriptFileList');
   list.innerHTML = "";
   scr.order.forEach(name=>{
+    const html = isHtmlFile(name);
     const row = document.createElement('div');
     row.className = 'script-file' + (name===scr.current ? ' active':'');
-    row.innerHTML = `<span class="fdot"></span><span class="fname">${escapeHtml(name)}</span><span class="fdel" title="Delete file">×</span>`;
+    row.innerHTML = `<span class="fdot${html?' html':''}"></span><span class="fname">${escapeHtml(name)}</span><span class="fdel" title="Delete file">×</span>`;
     row.querySelector('.fname').onclick = ()=>selectScriptFile(name);
     row.querySelector('.fdot').onclick = ()=>selectScriptFile(name);
     row.querySelector('.fdel').onclick = (e)=>{
@@ -2204,18 +2345,25 @@ function populateFunctionSelect(){
 }
 document.getElementById('scriptAddFile').onclick = ()=>{
   showDialog(`
-    <h3>New script file</h3>
-    <label>File name</label><input id="dlgScriptName" placeholder="Utilities.gs" value=".gs">
+    <h3>New file</h3>
+    <label>File name</label><input id="dlgScriptName" placeholder="Utilities.gs or index.html" value=".gs">
+    <p style="font-size:11px;color:var(--text-faint);margin:6px 2px 0;">Use a <code>.gs</code> name for server-side script files, or <code>.html</code> for a page servable via <code>HtmlService</code> (e.g. from <code>doGet()</code>).</p>
     <div class="dialog-actions"><button class="btn" id="dlgCancel">Cancel</button><button class="btn primary" id="dlgOk">Create</button></div>
   `);
   document.getElementById('dlgCancel').onclick = closeDialog;
   document.getElementById('dlgOk').onclick = ()=>{
     let name = document.getElementById('dlgScriptName').value.trim();
     if(!name){ closeDialog(); return; }
-    if(!name.endsWith('.gs')) name += '.gs';
     const scr = ensureScript();
+    let content;
+    if(isHtmlFile(name)){
+      content = `<!DOCTYPE html>\n<html>\n  <head>\n    <base target="_top">\n  </head>\n  <body>\n    <p>New page.</p>\n  </body>\n</html>\n`;
+    } else {
+      if(!name.endsWith('.gs')) name += '.gs';
+      content = `function ${name.replace(/\.gs$/,'').replace(/[^A-Za-z0-9_]/g,'_') || 'myFunction'}() {\n  \n}\n`;
+    }
     if(scr.files[name]){ showToast('A file with that name already exists'); closeDialog(); return; }
-    scr.files[name] = `function ${name.replace(/\.gs$/,'').replace(/[^A-Za-z0-9_]/g,'_') || 'myFunction'}() {\n  \n}\n`;
+    scr.files[name] = content;
     scr.order.push(name);
     closeDialog();
     renderScriptFiles(); selectScriptFile(name); populateFunctionSelect();
