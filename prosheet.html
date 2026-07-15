@@ -6,6 +6,7 @@
 <title>Pro Sheet</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root{
@@ -74,6 +75,9 @@ body{
 }
 #filename:hover,#filename:focus{border-color:var(--border);background:var(--surface-2);outline:none;}
 .save-status{font-size:10.5px;color:var(--text-faint);padding-left:7px;font-family:'DM Mono',monospace;}
+.save-status.syncing{color:var(--amber);}
+.save-status.synced{color:var(--success);}
+.save-status.error{color:var(--danger);}
 .menubar{display:flex;gap:2px;margin-left:6px;}
 .menu-item{
   font-size:12.5px;color:var(--text-dim);padding:5px 9px;border-radius:5px;cursor:pointer;position:relative;
@@ -103,6 +107,16 @@ body{
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#0b0d13;font-weight:700;}
 .btn.primary:hover{background:#7d9aff;}
 .btn svg{width:14px;height:14px;}
+.account-chip{
+  display:flex;align-items:center;gap:7px;background:var(--surface-2);border:1px solid var(--border);
+  border-radius:20px;padding:4px 10px 4px 4px;cursor:pointer;font-size:12px;color:var(--text-dim);
+}
+.account-chip:hover{background:var(--surface-3);}
+.account-chip img{width:22px;height:22px;border-radius:50%;}
+.account-chip .avatar-fallback{
+  width:22px;height:22px;border-radius:50%;background:var(--accent);color:#0b0d13;
+  display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;font-family:'DM Mono',monospace;
+}
 
 /* ============ TOOLBAR ============ */
 .toolbar{
@@ -118,6 +132,7 @@ body{
 .tbtn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;}
 .tbtn:hover{background:var(--surface-2);color:var(--text);}
 .tbtn.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent-dim);}
+.tbtn.disabled{opacity:.35;pointer-events:none;}
 .tsep{width:1px;height:20px;background:var(--border);margin:0 6px;flex-shrink:0;}
 .tselect{
   background:var(--surface-2);border:1px solid var(--border);color:var(--text);
@@ -143,6 +158,10 @@ body{
 .swatch-custom input[type=color]{width:26px;height:26px;border:none;background:transparent;cursor:pointer;padding:0;}
 .swatch-none{grid-column:span 8;font-size:11px;color:var(--text-dim);padding:4px 2px;cursor:pointer;border-top:1px solid var(--border);margin-top:4px;padding-top:6px;}
 .swatch-none:hover{color:var(--text);}
+.swatch-recent-label{grid-column:span 8;font-size:9.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.4px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border);}
+.swatch-opacity-wrap{grid-column:span 8;display:flex;align-items:center;gap:8px;margin-top:8px;}
+.swatch-opacity-wrap input[type=range]{flex:1;accent-color:var(--accent);}
+.swatch-opacity-wrap .opacity-val{font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);width:32px;text-align:right;}
 
 /* ============ FORMULA BAR ============ */
 .formulabar{
@@ -267,90 +286,6 @@ td.cell.active-cell{
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
 .hidden{display:none !important;}
-
-/* ============ APPS SCRIPT IDE ============ */
-.script-overlay{align-items:stretch;justify-content:stretch;background:rgba(6,7,10,.75);}
-.script-ide{
-  width:100%;height:100%;background:var(--bg);display:flex;flex-direction:column;
-}
-.script-topbar{
-  display:flex;align-items:center;gap:10px;padding:9px 16px;background:var(--header-bg);
-  border-bottom:1px solid var(--border);flex-shrink:0;
-}
-.script-title{
-  font-family:'Syne',sans-serif;font-weight:800;font-size:15px;display:flex;align-items:center;gap:8px;
-}
-.script-title .mark{
-  width:20px;height:20px;border-radius:5px;background:linear-gradient(135deg,var(--amber),#ff8a54);
-  display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:#1a1305;
-}
-.script-title .proj{color:var(--text-dim);font-family:'DM Sans',sans-serif;font-weight:500;font-size:12.5px;}
-#scriptFnSelect{width:170px;}
-.script-run-status{font-size:11px;color:var(--text-faint);font-family:'DM Mono',monospace;padding:0 4px;}
-.script-body{flex:1;display:flex;overflow:hidden;min-height:0;}
-.script-sidebar{
-  width:190px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);
-  display:flex;flex-direction:column;overflow-y:auto;
-}
-.script-sidebar-head{
-  display:flex;justify-content:space-between;align-items:center;padding:10px 12px 6px;
-  font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint);font-weight:600;
-}
-.script-file{
-  display:flex;align-items:center;gap:7px;padding:7px 12px;font-size:12.5px;color:var(--text-dim);
-  cursor:pointer;border-left:2px solid transparent;
-}
-.script-file:hover{background:var(--surface-2);color:var(--text);}
-.script-file.active{background:var(--accent-soft);color:var(--accent);border-left-color:var(--accent);}
-.script-file .fdot{width:6px;height:6px;border-radius:50%;background:var(--amber);flex-shrink:0;}
-.script-file .fdot.html{background:#6cc8ff;}
-.script-file .fname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.script-file .fdel{opacity:0;font-size:14px;color:var(--text-faint);padding:0 3px;}
-.script-file:hover .fdel{opacity:1;}
-.script-file .fdel:hover{color:var(--danger);}
-.script-editor-wrap{flex:1;display:flex;flex-direction:column;min-width:0;background:#12141b;}
-.script-editor-toolbar{
-  display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--surface);
-  border-bottom:1px solid var(--border);font-size:11px;color:var(--text-faint);font-family:'DM Mono',monospace;
-}
-#scriptEditor{
-  flex:1;width:100%;background:#12141b;color:#dbe0ee;border:none;outline:none;resize:none;
-  font-family:'DM Mono',monospace;font-size:13px;line-height:1.6;padding:14px 16px;
-  tab-size:2;white-space:pre;overflow:auto;
-}
-.script-console{
-  height:150px;flex-shrink:0;background:var(--surface);border-top:1px solid var(--border);
-  display:flex;flex-direction:column;
-}
-.script-console-head{
-  display:flex;justify-content:space-between;align-items:center;padding:6px 12px;
-  font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint);font-weight:600;
-  border-bottom:1px solid var(--border-soft);flex-shrink:0;
-}
-.script-console-head span{cursor:pointer;text-transform:none;letter-spacing:0;color:var(--text-dim);}
-.script-console-head span:hover{color:var(--text);}
-#scriptLog{flex:1;overflow-y:auto;padding:8px 12px;font-family:'DM Mono',monospace;font-size:11.5px;}
-.script-log-line{padding:2px 0;color:var(--text-dim);white-space:pre-wrap;word-break:break-word;}
-.script-log-line.info{color:var(--text-dim);}
-.script-log-line.success{color:var(--success);}
-.script-log-line.error{color:var(--danger);}
-.script-log-line .ts{color:var(--text-faint);margin-right:8px;}
-
-/* ============ WEB APP PREVIEW ============ */
-.preview-overlay{align-items:stretch;justify-content:stretch;}
-.preview-frame-wrap{
-  width:100%;height:100%;background:#fff;display:flex;flex-direction:column;
-}
-.preview-topbar{
-  display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--header-bg);
-  border-bottom:1px solid var(--border);flex-shrink:0;
-}
-.preview-topbar .furl{
-  flex:1;font-family:'DM Mono',monospace;font-size:11.5px;color:var(--text-dim);
-  background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 10px;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-}
-#previewFrame{flex:1;width:100%;border:none;background:#fff;}
 </style>
 </head>
 <body>
@@ -367,10 +302,13 @@ td.cell.active-cell{
     <div class="menu-item" data-menu="file">File
       <div class="dropdown" id="menu-file">
         <div class="dropdown-item" data-act="new">New sheet<span class="kbd"></span></div>
+        <div class="dropdown-item" data-act="addMultipleSheets">Add multiple sheets…</div>
         <div class="dropdown-item" data-act="save">Save<span class="kbd">Ctrl+S</span></div>
         <div class="dropdown-sep"></div>
         <div class="dropdown-item" data-act="importCsv">Import CSV…</div>
+        <div class="dropdown-item" data-act="importXlsx">Import Excel (.xlsx)…</div>
         <div class="dropdown-item" data-act="exportCsv">Export as CSV</div>
+        <div class="dropdown-item" data-act="exportXlsx">Export as Excel (.xlsx)</div>
         <div class="dropdown-item" data-act="exportJson">Export as JSON</div>
         <div class="dropdown-sep"></div>
         <div class="dropdown-item" data-act="print">Print<span class="kbd">Ctrl+P</span></div>
@@ -384,6 +322,7 @@ td.cell.active-cell{
         <div class="dropdown-item" data-act="cut">Cut<span class="kbd">Ctrl+X</span></div>
         <div class="dropdown-item" data-act="copy">Copy<span class="kbd">Ctrl+C</span></div>
         <div class="dropdown-item" data-act="paste">Paste<span class="kbd">Ctrl+V</span></div>
+        <div class="dropdown-item" data-act="pasteValues">Paste values only</div>
         <div class="dropdown-sep"></div>
         <div class="dropdown-item" data-act="clear">Clear cells<span class="kbd">Del</span></div>
         <div class="dropdown-item" data-act="find">Find &amp; replace<span class="kbd">Ctrl+F</span></div>
@@ -395,6 +334,12 @@ td.cell.active-cell{
         <div class="dropdown-item" data-act="rowBelow">Row below</div>
         <div class="dropdown-item" data-act="colLeft">Column left</div>
         <div class="dropdown-item" data-act="colRight">Column right</div>
+        <div class="dropdown-sep"></div>
+        <div class="dropdown-item" data-act="deleteRow">Delete row</div>
+        <div class="dropdown-item" data-act="deleteCol">Delete column</div>
+        <div class="dropdown-item" data-act="hideRow">Hide row</div>
+        <div class="dropdown-item" data-act="hideCol">Hide column</div>
+        <div class="dropdown-item" data-act="unhideAll">Unhide all</div>
         <div class="dropdown-sep"></div>
         <div class="dropdown-item" data-act="chart">Chart from selection</div>
       </div>
@@ -412,26 +357,26 @@ td.cell.active-cell{
         <div class="dropdown-sep"></div>
         <div class="dropdown-item" data-act="freezeRow">Freeze row 1</div>
         <div class="dropdown-item" data-act="freezeCol">Freeze column A</div>
+        <div class="dropdown-sep"></div>
+        <div class="dropdown-item" data-act="wrapText">Wrap text</div>
+        <div class="dropdown-item" data-act="strike">Strikethrough</div>
+        <div class="dropdown-sep"></div>
+        <div class="dropdown-item" data-act="condFormat">Conditional formatting…</div>
       </div>
     </div>
     <div class="menu-item" data-menu="data">Data
       <div class="dropdown" id="menu-data">
         <div class="dropdown-item" data-act="sortAsc">Sort range A→Z</div>
         <div class="dropdown-item" data-act="sortDesc">Sort range Z→A</div>
+        <div class="dropdown-sep"></div>
+        <div class="dropdown-item" data-act="namedRange">Name this range…</div>
+        <div class="dropdown-item" data-act="duplicateSheet">Duplicate sheet</div>
       </div>
     </div>
-    <div class="menu-item" data-menu="extensions">Extensions
-      <div class="dropdown" id="menu-extensions">
-        <div class="dropdown-item" data-act="openAppsScript">Apps Script</div>
-      </div>
-    </div>
-    <div id="customMenuContainer" style="display:flex;gap:2px;"></div>
   </div>
   <div class="topbar-right">
-    <span class="save-status" id="cloudStatus" style="display:none;"></span>
-    <div id="googleSignInBtn"></div>
-    <div id="userChip" style="display:none;align-items:center;gap:6px;cursor:pointer;padding:4px 8px;border-radius:20px;background:var(--surface-2);border:1px solid var(--border);" title="Click to sign out"></div>
     <button class="btn" id="chartBtn">Chart</button>
+    <div id="accountArea"></div>
     <button class="btn primary" id="saveBtn">Save</button>
   </div>
 </div>
@@ -463,6 +408,8 @@ td.cell.active-cell{
   <div class="tbtn" id="boldBtn" title="Bold (Ctrl+B)"><svg viewBox="0 0 24 24"><path d="M6 4h7a3.5 3.5 0 0 1 0 7H6zM6 11h8a3.5 3.5 0 0 1 0 7H6z"/></svg></div>
   <div class="tbtn" id="italicBtn" title="Italic (Ctrl+I)"><svg viewBox="0 0 24 24"><path d="M10 4h6M6 20h6M13 4l-4 16"/></svg></div>
   <div class="tbtn" id="underlineBtn" title="Underline (Ctrl+U)"><svg viewBox="0 0 24 24"><path d="M6 4v6a6 6 0 0 0 12 0V4M4 20h16"/></svg></div>
+  <div class="tbtn" id="strikeBtn" title="Strikethrough (Ctrl+Shift+X)"><svg viewBox="0 0 24 24"><path d="M6 12h12M8 8c0-2 1.5-3.5 4-3.5S16 6 16 8M8 16c0 2 1.5 3.5 4 3.5s4-1.5 4-3.5"/></svg></div>
+  <div class="tbtn" id="wrapBtn" title="Wrap text"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h11a3 3 0 0 1 0 6h-2m0 0 2-2m-2 2 2 2M4 18h4"/></svg></div>
   <div class="tsep"></div>
   <div class="color-swatch-wrap">
     <div class="tbtn" id="textColorBtn" title="Text color">A<div class="color-current" id="textColorCurrent" style="background:#e7e9ef"></div></div>
@@ -483,6 +430,7 @@ td.cell.active-cell{
   <div class="tbtn" id="mergeBtn" title="Merge cells"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="8" height="12"/><rect x="13" y="6" width="8" height="12"/><path d="M11 12h2"/></svg></div>
   <div class="tsep"></div>
   <div class="tbtn" id="sumBtn" title="AutoSum"><svg viewBox="0 0 24 24"><path d="M6 5h12l-6 7 6 7H6"/></svg></div>
+  <div class="tbtn" id="condFormatBtn" title="Conditional formatting"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/><circle cx="8" cy="15" r="1.6" fill="currentColor" stroke="none"/><circle cx="14" cy="15" r="1.6" fill="currentColor" stroke="none"/></svg></div>
 </div>
 
 <!-- FORMULA BAR -->
@@ -514,48 +462,8 @@ td.cell.active-cell{
   <div class="dialog" id="dialogBox"></div>
 </div>
 
-<div class="overlay script-overlay" id="scriptOverlay">
-  <div class="script-ide">
-    <div class="script-topbar">
-      <div class="script-title"><div class="mark">Gs</div>Apps Script<span class="proj" id="scriptProjName">— Untitled spreadsheet</span></div>
-      <select class="tselect" id="scriptFnSelect" title="Function to run"></select>
-      <button class="btn primary" id="scriptRunBtn">▶ Run</button>
-      <button class="btn" id="scriptPreviewBtn" title="Preview doGet() as a web app">◱ Preview</button>
-      <button class="btn" id="scriptSaveBtn">Save</button>
-      <button class="btn" id="scriptDeployBtn" style="background:linear-gradient(135deg,var(--accent),#9b6cff);border:none;color:#0b0d13;font-weight:700;">⇪ Deploy</button>
-      <a class="btn" id="scriptOpenWebAppLink" href="#" target="_blank" rel="noopener" style="display:none;text-decoration:none;white-space:nowrap;">🔗 Open Web App</a>
-      <span class="script-run-status" id="scriptRunStatus"></span>
-      <div style="margin-left:auto;"></div>
-      <button class="btn" id="scriptCloseBtn">Close</button>
-    </div>
-    <div class="script-body">
-      <div class="script-sidebar">
-        <div class="script-sidebar-head">Files <span class="tab-add" id="scriptAddFile" title="Add .gs or .html file">+</span></div>
-        <div id="scriptFileList"></div>
-      </div>
-      <div class="script-editor-wrap">
-        <div class="script-editor-toolbar"><span id="scriptCurrentFile">Code.gs</span></div>
-        <textarea id="scriptEditor" spellcheck="false"></textarea>
-      </div>
-    </div>
-    <div class="script-console">
-      <div class="script-console-head">Execution log <span id="scriptClearLog">Clear</span></div>
-      <div id="scriptLog"></div>
-    </div>
-  </div>
-</div>
-
-<div class="overlay preview-overlay" id="previewOverlay">
-  <div class="preview-frame-wrap">
-    <div class="preview-topbar">
-      <div class="furl" id="previewUrl">Local preview — doGet()</div>
-      <button class="btn" id="previewCloseBtn">Close</button>
-    </div>
-    <iframe id="previewFrame" sandbox="allow-scripts allow-forms allow-modals"></iframe>
-  </div>
-</div>
-
 <div class="toast" id="toast"></div>
+
 <script>
 (function(){
 "use strict";
@@ -599,113 +507,124 @@ const COLORS = ["#e7e9ef","#8b90a3","#ff6b6b","#ffb454","#ffe066","#4ade80","#4d
                  "#ffffff","#c2c6d6","#c0392b","#e67e22","#f1c40f","#27ae60","#16a085","#2980b9","#8e44ad","#d81b60",
                  "transparent","#0e1016","#151822","#1c202c","#242938","#2a2f3d","#3a4a8a","#6c8cff33","#4ade8033","#ffb45433"];
 
-/* ================= GOOGLE AUTH + CLOUD SYNC (GAS backend) ================= */
-// Shared OAuth Client ID used across the Pro suite.
-const GOOGLE_CLIENT_ID = "384904424093-j1a6kupjerhjufurpvur4hbik6k90bla.apps.googleusercontent.com";
-// Paste the /exec URL of your deployed Code.gs Web App here.
-const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwZIVg5Poh4vCkC8RRtP0FmrK5n-_OEYA44XsoJoIEuF9BN_K0SkwbmIYNHF_6eIhje/exec";
-let googleIdToken = null;
-let googleUser = null;
+/* ================= CLOUD SYNC (Google OAuth + Apps Script) ================= */
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzR1YIn6ulXaNV2lCiljfrcQKuD3OAbEbUqgJc0ej5GdYXPjQPcghQlGvGdsyFH9DL1-w/exec";
+const OAUTH_CLIENT_ID = "384904424093-j1a6kupjerhjufurpvur4hbik6k90bla.apps.googleusercontent.com";
+const AUTH_KEY = "prosheet_auth";
+let authState = null; // {idToken, email, name, picture}
 let cloudSyncTimer = null;
-let cloudLoadInFlight = false;
+let lastCloudSyncedAt = 0;
 
-function gasConfigured(){ return GAS_WEBAPP_URL && GAS_WEBAPP_URL.indexOf('PASTE_YOUR') !== 0; }
-
-function initGoogleAuth(){
-  if(!window.google || !google.accounts || !google.accounts.id){ setTimeout(initGoogleAuth, 300); return; }
+function loadAuthState(){
   try{
-    google.accounts.id.initialize({
-      client_id: GOOGLE_CLIENT_ID,
-      callback: handleCredentialResponse,
-      auto_select: true
-    });
-    google.accounts.id.renderButton(document.getElementById('googleSignInBtn'), {theme:'filled_black', size:'medium', text:'signin_with', shape:'pill'});
-  }catch(e){ /* GIS not reachable (offline/blocked) — app still works locally */ }
-  const savedToken = localStorage.getItem('prosheet_id_token');
-  const savedUser = localStorage.getItem('prosheet_user');
-  if(savedToken && savedUser){
-    googleIdToken = savedToken;
-    try{ googleUser = JSON.parse(savedUser); }catch(e){ googleUser = {name:'Signed in'}; }
-    showSignedInUI();
-    cloudLoadWorkbook();
+    const raw = localStorage.getItem(AUTH_KEY);
+    if(raw) authState = JSON.parse(raw);
+  }catch(e){ authState = null; }
+}
+function persistAuthState(){
+  if(authState) localStorage.setItem(AUTH_KEY, JSON.stringify(authState));
+  else localStorage.removeItem(AUTH_KEY);
+}
+function decodeJwt(token){
+  try{
+    const payload = token.split('.')[1];
+    const json = decodeURIComponent(atob(payload.replace(/-/g,'+').replace(/_/g,'/')).split('').map(c=>
+      '%' + ('00'+c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+    return JSON.parse(json);
+  }catch(e){ return {}; }
+}
+function handleGoogleCredential(response){
+  const info = decodeJwt(response.credential);
+  authState = { idToken: response.credential, email: info.email, name: info.name, picture: info.picture };
+  persistAuthState();
+  renderAccountArea();
+  showToast("Signed in as " + (info.email||""));
+  cloudLoadCurrentDoc();
+}
+function initGoogleSignIn(){
+  if(typeof google === 'undefined' || !google.accounts || !google.accounts.id) { setTimeout(initGoogleSignIn, 400); return; }
+  google.accounts.id.initialize({ client_id: OAUTH_CLIENT_ID, callback: handleGoogleCredential });
+  renderAccountArea();
+}
+function renderAccountArea(){
+  const area = document.getElementById('accountArea');
+  if(!area) return;
+  if(authState && authState.email){
+    const initial = (authState.name||authState.email||"?").charAt(0).toUpperCase();
+    area.innerHTML = `<div class="account-chip" id="accountChip" title="${escapeHtml(authState.email)} — click to sign out">
+      ${authState.picture ? `<img src="${authState.picture}" referrerpolicy="no-referrer">` : `<div class="avatar-fallback">${initial}</div>`}
+      <span>${escapeHtml((authState.name||authState.email||"").split(' ')[0])}</span>
+    </div>`;
+    document.getElementById('accountChip').onclick = ()=>{
+      if(confirm("Sign out of Pro Sheet cloud sync?")){
+        authState = null; persistAuthState(); renderAccountArea();
+        setSaveStatus("Signed out — saving locally only", "");
+      }
+    };
+  } else {
+    area.innerHTML = `<div id="gsiBtnHolder"></div>`;
+    if(typeof google !== 'undefined' && google.accounts && google.accounts.id){
+      google.accounts.id.renderButton(document.getElementById('gsiBtnHolder'), { theme:'filled_black', size:'medium', shape:'pill', text:'signin' });
+    }
   }
 }
-function handleCredentialResponse(resp){
-  googleIdToken = resp.credential;
-  try{
-    const payload = JSON.parse(atob(resp.credential.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
-    googleUser = {name:payload.name, email:payload.email, picture:payload.picture, sub:payload.sub};
-  }catch(e){ googleUser = {name:'Signed in'}; }
-  localStorage.setItem('prosheet_id_token', googleIdToken);
-  localStorage.setItem('prosheet_user', JSON.stringify(googleUser));
-  showSignedInUI();
-  cloudLoadWorkbook();
-  showToast('Signed in — syncing to Drive');
+function setSaveStatus(text, cls){
+  const el = document.getElementById('saveStatus');
+  el.textContent = text;
+  el.className = 'save-status' + (cls ? ' '+cls : '');
 }
-function showSignedInUI(){
-  document.getElementById('googleSignInBtn').style.display='none';
-  const chip = document.getElementById('userChip');
-  chip.style.display='flex';
-  chip.innerHTML = `${googleUser.picture? `<img src="${googleUser.picture}" style="width:20px;height:20px;border-radius:50%;" onerror="this.style.display='none'">`:''}<span style="font-size:11.5px;color:var(--text-dim)">${escapeHtml(googleUser.name||googleUser.email||'Signed in')}</span>`;
-  chip.onclick = signOutGoogle;
-  document.getElementById('cloudStatus').style.display='inline';
-  setCloudStatus(gasConfigured()? 'Connected' : 'Signed in (backend not configured)');
-}
-function signOutGoogle(){
-  googleIdToken=null; googleUser=null;
-  localStorage.removeItem('prosheet_id_token'); localStorage.removeItem('prosheet_user');
-  document.getElementById('googleSignInBtn').style.display='block';
-  document.getElementById('userChip').style.display='none';
-  document.getElementById('cloudStatus').style.display='none';
-  showToast('Signed out — saving locally only');
-}
-function setCloudStatus(text){ const el=document.getElementById('cloudStatus'); if(el) el.textContent = text; }
-
-// Plain-text POST body (Content-Type: text/plain) avoids a CORS preflight against the GAS Web App,
-// matching the cloudCall/gasCall pattern used across the Pro suite.
-async function gasCall(action, data){
-  if(!gasConfigured()) throw new Error('GAS_WEBAPP_URL is not configured. Deploy Code.gs as a Web App and paste the /exec URL at the top of the script.');
-  const res = await fetch(GAS_WEBAPP_URL, {
-    method:'POST',
-    headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body: JSON.stringify({action, idToken: googleIdToken, data})
+function cloudCall(action, data){
+  if(!authState || !authState.idToken) return Promise.reject(new Error("Not signed in"));
+  return fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' }, // avoids CORS preflight, matches Pro Document pattern
+    body: JSON.stringify({ idToken: authState.idToken, action, data: data||{} })
+  }).then(r=>r.json()).then(res=>{
+    if(!res.ok) throw new Error(res.error||"Cloud sync error");
+    return res.result;
   });
-  const json = await res.json();
-  if(!json.ok) throw new Error(json.error || 'Backend error');
-  return json.result;
+}
+function cloudSaveCurrentDoc(){
+  if(!authState) return;
+  const payload = {
+    id: DOC_ID,
+    name: document.getElementById('filename').value || "Untitled spreadsheet",
+    json: JSON.stringify(workbook),
+    updatedAt: Date.now()
+  };
+  setSaveStatus("Syncing to cloud…", "syncing");
+  cloudCall('save', payload).then(res=>{
+    lastCloudSyncedAt = res.updatedAt || Date.now();
+    setSaveStatus("Synced to cloud", "synced");
+  }).catch(err=>{
+    setSaveStatus("Cloud sync failed — saved locally", "error");
+  });
+}
+function cloudLoadCurrentDoc(){
+  if(!authState) return;
+  cloudCall('get', {id: DOC_ID}).then(res=>{
+    if(res && res.json){
+      const cloudWb = JSON.parse(res.json);
+      // Only overwrite local if the cloud copy is newer than what we have locally
+      const localRaw = localStorage.getItem(STORAGE_KEY);
+      const localTime = localRaw ? (JSON.parse(localRaw).lastSavedAt||0) : 0;
+      if(!res.updatedAt || res.updatedAt >= localTime){
+        workbook = cloudWb;
+        if(!workbook.sheets[workbook.current]) workbook.current = workbook.order[0];
+        document.getElementById('filename').value = workbook.filename || "Untitled spreadsheet";
+        computedCache = {};
+        renderAll();
+        setSaveStatus("Loaded from cloud", "synced");
+      }
+    }
+  }).catch(()=>{ /* no cloud copy yet, or offline — keep local version */ });
+}
+function scheduleCloudSync(){
+  if(!authState) return;
+  clearTimeout(cloudSyncTimer);
+  cloudSyncTimer = setTimeout(cloudSaveCurrentDoc, 1200);
 }
 
-function cloudSaveWorkbook(){
-  if(!googleIdToken || !gasConfigured()) return;
-  clearTimeout(cloudSyncTimer);
-  setCloudStatus('Syncing…');
-  cloudSyncTimer = setTimeout(async ()=>{
-    try{
-      await gasCall('saveWorkbook', { docId: DOC_ID, name: document.getElementById('filename').value || 'Untitled spreadsheet', workbook });
-      setCloudStatus('Synced to Drive');
-    }catch(e){ setCloudStatus('Sync failed'); console.error(e); }
-  }, 1200);
-}
-async function cloudLoadWorkbook(){
-  if(!googleIdToken || !gasConfigured() || cloudLoadInFlight) return;
-  cloudLoadInFlight = true;
-  try{
-    setCloudStatus('Loading…');
-    const result = await gasCall('loadWorkbook', { docId: DOC_ID });
-    if(result && result.workbook){
-      workbook = result.workbook;
-      document.getElementById('filename').value = workbook.filename || 'Untitled spreadsheet';
-      if(!workbook.sheets[workbook.current]) workbook.current = workbook.order[0];
-      computedCache = {};
-      renderAll();
-      setCloudStatus('Synced to Drive');
-    } else {
-      setCloudStatus('Synced to Drive');
-      cloudSaveWorkbook();
-    }
-  }catch(e){ setCloudStatus('No cloud copy yet'); }
-  finally{ cloudLoadInFlight = false; }
-}
 /* ================= STATE ================= */
 let workbook = {
   sheets: {
@@ -753,10 +672,10 @@ function showToast(msg){
   clearTimeout(t._timer); t._timer = setTimeout(()=>t.classList.remove('show'), 1800);
 }
 function markDirty(){
-  document.getElementById('saveStatus').textContent = "Unsaved changes";
+  setSaveStatus("Unsaved changes", "");
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveWorkbook, 900);
-  cloudSaveWorkbook();
+  scheduleCloudSync();
 }
 
 /* ================= UNDO/REDO ================= */
@@ -768,6 +687,7 @@ function pushUndo(){
   undoStack.push({sheetName:workbook.current, snap:snapshot()});
   if(undoStack.length>100) undoStack.shift();
   redoStack = [];
+  syncUndoRedoButtons();
 }
 function restore(snapObj){
   const s = JSON.parse(snapObj.snap);
@@ -782,6 +702,7 @@ function undo(){
   restore(s);
   computedCache = {};
   renderAll(); markDirty();
+  syncUndoRedoButtons();
 }
 function redo(){
   if(!redoStack.length) return;
@@ -791,6 +712,12 @@ function redo(){
   restore(s);
   computedCache = {};
   renderAll(); markDirty();
+  syncUndoRedoButtons();
+}
+function syncUndoRedoButtons(){
+  const u = document.getElementById('undoBtn'), r = document.getElementById('redoBtn');
+  if(u) u.classList.toggle('disabled', undoStack.length===0);
+  if(r) r.classList.toggle('disabled', redoStack.length===0);
 }
 
 /* ================= FORMULA ENGINE ================= */
@@ -804,30 +731,241 @@ function rangeValues(r1,c1,r2,c2){
   return vals;
 }
 function toNum(v){ if(v===""||v===null||v===undefined) return NaN; const n = parseFloat(v); return isNaN(n)?NaN:n; }
+function flatten(a){ return a.flat ? a.flat(Infinity) : a; }
+function excelDateSerial(v){
+  // Accept Date, numeric serial, or parseable date string; returns Date object or null
+  if(v instanceof Date) return v;
+  const n = toNum(v);
+  if(!isNaN(n) && typeof v !== 'string'){
+    // treat as days since epoch offset (rudimentary)
+    return new Date(n);
+  }
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+}
+function daysBetween(d1,d2){ return Math.round((d2.getTime()-d1.getTime())/86400000); }
 const FN = {
-  SUM: (...a)=>a.flat(Infinity).map(toNum).filter(n=>!isNaN(n)).reduce((x,y)=>x+y,0),
-  AVERAGE: (...a)=>{ const n=a.flat(Infinity).map(toNum).filter(n=>!isNaN(n)); return n.length? n.reduce((x,y)=>x+y,0)/n.length : 0; },
-  MIN: (...a)=>{ const n=a.flat(Infinity).map(toNum).filter(n=>!isNaN(n)); return n.length? Math.min(...n):0; },
-  MAX: (...a)=>{ const n=a.flat(Infinity).map(toNum).filter(n=>!isNaN(n)); return n.length? Math.max(...n):0; },
-  COUNT: (...a)=>a.flat(Infinity).map(toNum).filter(n=>!isNaN(n)).length,
-  COUNTA: (...a)=>a.flat(Infinity).filter(v=>v!==""&&v!==null&&v!==undefined).length,
+  SUM: (...a)=>flatten(a).map(toNum).filter(n=>!isNaN(n)).reduce((x,y)=>x+y,0),
+  AVERAGE: (...a)=>{ const n=flatten(a).map(toNum).filter(n=>!isNaN(n)); return n.length? n.reduce((x,y)=>x+y,0)/n.length : 0; },
+  MEDIAN: (...a)=>{ const n=flatten(a).map(toNum).filter(x=>!isNaN(x)).sort((x,y)=>x-y); if(!n.length) return 0; const m=Math.floor(n.length/2); return n.length%2? n[m] : (n[m-1]+n[m])/2; },
+  MIN: (...a)=>{ const n=flatten(a).map(toNum).filter(n=>!isNaN(n)); return n.length? Math.min(...n):0; },
+  MAX: (...a)=>{ const n=flatten(a).map(toNum).filter(n=>!isNaN(n)); return n.length? Math.max(...n):0; },
+  COUNT: (...a)=>flatten(a).map(toNum).filter(n=>!isNaN(n)).length,
+  COUNTA: (...a)=>flatten(a).filter(v=>v!==""&&v!==null&&v!==undefined).length,
+  COUNTBLANK: (...a)=>flatten(a).filter(v=>v===""||v===null||v===undefined).length,
+  COUNTIF: (range,crit)=>{
+    const arr = flatten([range]);
+    return arr.filter(v=>matchCriteria(v,crit)).length;
+  },
+  SUMIF: (range,crit,sumRange)=>{
+    const arr = flatten([range]);
+    const sumArr = sumRange!==undefined ? flatten([sumRange]) : arr;
+    let total=0;
+    arr.forEach((v,i)=>{ if(matchCriteria(v,crit)) total += (toNum(sumArr[i])||0); });
+    return total;
+  },
+  AVERAGEIF: (range,crit,avgRange)=>{
+    const arr = flatten([range]);
+    const avgArr = avgRange!==undefined ? flatten([avgRange]) : arr;
+    let total=0,count=0;
+    arr.forEach((v,i)=>{ if(matchCriteria(v,crit)){ total += (toNum(avgArr[i])||0); count++; } });
+    return count? total/count : 0;
+  },
+  STDEV: (...a)=>{
+    const n=flatten(a).map(toNum).filter(x=>!isNaN(x));
+    if(n.length<2) return 0;
+    const mean=n.reduce((x,y)=>x+y,0)/n.length;
+    const variance=n.reduce((s,v)=>s+Math.pow(v-mean,2),0)/(n.length-1);
+    return Math.sqrt(variance);
+  },
+  STDEVP: (...a)=>{
+    const n=flatten(a).map(toNum).filter(x=>!isNaN(x));
+    if(!n.length) return 0;
+    const mean=n.reduce((x,y)=>x+y,0)/n.length;
+    const variance=n.reduce((s,v)=>s+Math.pow(v-mean,2),0)/n.length;
+    return Math.sqrt(variance);
+  },
+  VARIANCE: (...a)=>{
+    const n=flatten(a).map(toNum).filter(x=>!isNaN(x));
+    if(n.length<2) return 0;
+    const mean=n.reduce((x,y)=>x+y,0)/n.length;
+    return n.reduce((s,v)=>s+Math.pow(v-mean,2),0)/(n.length-1);
+  },
+  VARP: (...a)=>{
+    const n=flatten(a).map(toNum).filter(x=>!isNaN(x));
+    if(!n.length) return 0;
+    const mean=n.reduce((x,y)=>x+y,0)/n.length;
+    return n.reduce((s,v)=>s+Math.pow(v-mean,2),0)/n.length;
+  },
+  MODE: (...a)=>{
+    const n=flatten(a).map(toNum).filter(x=>!isNaN(x));
+    if(!n.length) return 0;
+    const counts={};
+    n.forEach(v=>counts[v]=(counts[v]||0)+1);
+    let best=n[0],bestCount=0;
+    Object.keys(counts).forEach(k=>{ if(counts[k]>bestCount){bestCount=counts[k]; best=parseFloat(k);} });
+    return best;
+  },
   IF: (cond,t,f)=> cond?t:f,
-  AND: (...a)=>a.flat(Infinity).every(Boolean),
-  OR: (...a)=>a.flat(Infinity).some(Boolean),
+  IFS: (...a)=>{ for(let i=0;i<a.length;i+=2){ if(a[i]) return a[i+1]; } return "#N/A"; },
+  IFERROR: (v,fallback)=>{ const s=String(v); return (s.startsWith('#')) ? fallback : v; },
+  AND: (...a)=>flatten(a).every(Boolean),
+  OR: (...a)=>flatten(a).some(Boolean),
   NOT: (a)=>!a,
-  CONCATENATE: (...a)=>a.flat(Infinity).join(""),
+  CONCATENATE: (...a)=>flatten(a).join(""),
+  CONCAT: (...a)=>flatten(a).join(""),
+  TEXTJOIN: (delim,ignoreEmpty,...a)=>{
+    let arr = flatten(a);
+    if(ignoreEmpty) arr = arr.filter(v=>v!==""&&v!==null&&v!==undefined);
+    return arr.join(delim);
+  },
+  TEXT: (v,fmt)=>{
+    const n = toNum(v);
+    if(fmt && /0/.test(fmt) && !isNaN(n)){
+      const decimals = (fmt.split('.')[1]||"").length;
+      return n.toFixed(decimals);
+    }
+    return String(v);
+  },
   ROUND: (n,d)=>{ d=d||0; return Math.round(n*Math.pow(10,d))/Math.pow(10,d); },
+  ROUNDUP: (n,d)=>{ d=d||0; const f=Math.pow(10,d); return Math.ceil(n*f)/f; },
+  ROUNDDOWN: (n,d)=>{ d=d||0; const f=Math.pow(10,d); return Math.floor(n*f)/f; },
+  TRUNC: (n,d)=>{ d=d||0; const f=Math.pow(10,d); return Math.trunc(n*f)/f; },
+  INT: (n)=>Math.floor(n),
+  MOD: (n,d)=>n%d,
   ABS: (n)=>Math.abs(n),
   SQRT: (n)=>Math.sqrt(n),
   POWER: (n,p)=>Math.pow(n,p),
   TODAY: ()=> new Date().toISOString().slice(0,10),
   NOW: ()=> new Date().toLocaleString(),
+  YEAR: (v)=>{ const d=excelDateSerial(v); return d? d.getFullYear() : "#ERROR!"; },
+  MONTH: (v)=>{ const d=excelDateSerial(v); return d? d.getMonth()+1 : "#ERROR!"; },
+  DAY: (v)=>{ const d=excelDateSerial(v); return d? d.getDate() : "#ERROR!"; },
+  DATE: (y,m,d)=>{ const dt=new Date(y,m-1,d); return dt.toISOString().slice(0,10); },
+  WEEKDAY: (v,type)=>{
+    const d=excelDateSerial(v); if(!d) return "#ERROR!";
+    let day=d.getDay(); // 0=Sun
+    type = type||1;
+    if(type===1) return day+1; // 1=Sun..7=Sat
+    if(type===2) return day===0?7:day; // 1=Mon..7=Sun
+    if(type===3) return day===0?6:day-1; // 0=Mon..6=Sun
+    return day+1;
+  },
+  EDATE: (v,months)=>{
+    const d=excelDateSerial(v); if(!d) return "#ERROR!";
+    const nd=new Date(d); nd.setMonth(nd.getMonth()+parseInt(months,10));
+    return nd.toISOString().slice(0,10);
+  },
+  EOMONTH: (v,months)=>{
+    const d=excelDateSerial(v); if(!d) return "#ERROR!";
+    const nd=new Date(d.getFullYear(), d.getMonth()+parseInt(months,10)+1, 0);
+    return nd.toISOString().slice(0,10);
+  },
+  DATEDIF: (start,end,unit)=>{
+    const d1=excelDateSerial(start), d2=excelDateSerial(end);
+    if(!d1||!d2) return "#ERROR!";
+    unit = (unit||"D").toUpperCase();
+    if(unit==="D") return daysBetween(d1,d2);
+    if(unit==="M") return (d2.getFullYear()-d1.getFullYear())*12 + (d2.getMonth()-d1.getMonth());
+    if(unit==="Y") return d2.getFullYear()-d1.getFullYear();
+    return daysBetween(d1,d2);
+  },
+  NETWORKDAYS: (start,end)=>{
+    const d1=excelDateSerial(start), d2=excelDateSerial(end);
+    if(!d1||!d2) return "#ERROR!";
+    let count=0; const cur=new Date(Math.min(d1,d2)); const last=new Date(Math.max(d1,d2));
+    while(cur<=last){ const dow=cur.getDay(); if(dow!==0 && dow!==6) count++; cur.setDate(cur.getDate()+1); }
+    return count;
+  },
   LEN: (s)=>String(s).length,
   UPPER: (s)=>String(s).toUpperCase(),
   LOWER: (s)=>String(s).toLowerCase(),
-  TRIM: (s)=>String(s).trim(),
-  PI: ()=>Math.PI
+  PROPER: (s)=>String(s).replace(/\w\S*/g, t=>t.charAt(0).toUpperCase()+t.substr(1).toLowerCase()),
+  TRIM: (s)=>String(s).trim().replace(/\s+/g,' '),
+  LEFT: (s,n)=>String(s).slice(0, n===undefined?1:n),
+  RIGHT: (s,n)=>{ s=String(s); n=n===undefined?1:n; return s.slice(Math.max(0,s.length-n)); },
+  MID: (s,start,len)=>String(s).slice(start-1, start-1+len),
+  REPT: (s,n)=>String(s).repeat(Math.max(0,parseInt(n,10)||0)),
+  SUBSTITUTE: (s,find,repl)=>String(s).split(find).join(repl),
+  SPLIT: (s,delim)=>String(s).split(delim===undefined?",":delim),
+  FIND: (find,within,start)=>{
+    const idx = String(within).indexOf(String(find), (start||1)-1);
+    return idx===-1 ? "#N/A" : idx+1;
+  },
+  SEARCH: (find,within,start)=>{
+    const idx = String(within).toLowerCase().indexOf(String(find).toLowerCase(), (start||1)-1);
+    return idx===-1 ? "#N/A" : idx+1;
+  },
+  PI: ()=>Math.PI,
+  VLOOKUP: (needle, table, colIdx, exact)=>{
+    // table is a 2D array produced from a range like A1:C10
+    if(!Array.isArray(table)) return "#ERROR!";
+    const rows = Array.isArray(table[0]) ? table : [table];
+    for(const row of rows){
+      const key = row[0];
+      if(exact===false || exact===undefined){
+        if(String(key)===String(needle)) return row[colIdx-1];
+      } else {
+        if(String(key)===String(needle)) return row[colIdx-1];
+      }
+    }
+    return "#N/A";
+  },
+  HLOOKUP: (needle, table, rowIdx, exact)=>{
+    if(!Array.isArray(table)) return "#ERROR!";
+    const rows = Array.isArray(table[0]) ? table : [table];
+    const headerRow = rows[0];
+    for(let i=0;i<headerRow.length;i++){
+      if(String(headerRow[i])===String(needle)){
+        const targetRow = rows[rowIdx-1];
+        return targetRow ? targetRow[i] : "#N/A";
+      }
+    }
+    return "#N/A";
+  },
+  XLOOKUP: (needle, lookupArr, returnArr)=>{
+    const lookup = flatten([lookupArr]);
+    const ret = flatten([returnArr]);
+    for(let i=0;i<lookup.length;i++){
+      if(String(lookup[i])===String(needle)) return ret[i];
+    }
+    return "#N/A";
+  },
+  INDEX: (arr,rowN,colN)=>{
+    if(!Array.isArray(arr)) return "#ERROR!";
+    const rows = Array.isArray(arr[0]) ? arr : [arr];
+    if(colN===undefined){
+      return Array.isArray(arr[0]) ? (rows[rowN-1]||[])[0] : arr[rowN-1];
+    }
+    return (rows[rowN-1]||[])[colN-1];
+  },
+  MATCH: (needle, arr)=>{
+    const flat = flatten([arr]);
+    for(let i=0;i<flat.length;i++){ if(String(flat[i])===String(needle)) return i+1; }
+    return "#N/A";
+  }
 };
+function matchCriteria(v, crit){
+  if(crit===undefined||crit===null) return false;
+  const critStr = String(crit);
+  const m = critStr.match(/^(>=|<=|<>|>|<|=)?(.*)$/);
+  const op = m[1]||"="; const rhs = m[2];
+  const num = toNum(v), rnum = toNum(rhs);
+  if(!isNaN(num) && !isNaN(rnum)){
+    switch(op){
+      case '>': return num>rnum;
+      case '<': return num<rnum;
+      case '>=': return num>=rnum;
+      case '<=': return num<=rnum;
+      case '<>': return num!==rnum;
+      default: return num===rnum;
+    }
+  }
+  switch(op){
+    case '<>': return String(v)!==rhs;
+    default: return String(v)===rhs;
+  }
+}
 
 function evaluateCell(id, visiting){
   visiting = visiting || new Set();
@@ -843,18 +981,23 @@ function evaluateCell(id, visiting){
   visiting.add(id);
   let expr = raw.slice(1);
   try{
-    // replace ranges first: A1:B5
+    // replace ranges first: A1:B5 -> becomes a (possibly 2D) array literal
     expr = expr.replace(/\$?([A-Z]{1,2})\$?(\d+):\$?([A-Z]{1,2})\$?(\d+)/g, (m,c1,r1,c2,r2)=>{
       const ci1=colIndex(c1), ri1=parseInt(r1,10)-1, ci2=colIndex(c2), ri2=parseInt(r2,10)-1;
-      const vals = [];
-      for(let r=Math.min(ri1,ri2); r<=Math.max(ri1,ri2); r++){
-        for(let c=Math.min(ci1,ci2); c<=Math.max(ci1,ci2); c++){
+      const rMin=Math.min(ri1,ri2), rMax=Math.max(ri1,ri2), cMin=Math.min(ci1,ci2), cMax=Math.max(ci1,ci2);
+      const rows = [];
+      for(let r=rMin; r<=rMax; r++){
+        const row = [];
+        for(let c=cMin; c<=cMax; c++){
           const vid = cellId(c,r);
           let v = evaluateCell(vid, visiting);
-          vals.push(typeof v === "string" ? JSON.stringify(v) : v);
+          row.push(v);
         }
+        rows.push(row);
       }
-      return "["+vals.join(",")+"]";
+      // 1-D range (single row or single col): flatten to simple array for SUM/AVERAGE etc; keep 2D for VLOOKUP/INDEX
+      const literal = JSON.stringify(rows.length===1 ? rows[0] : rows);
+      return literal;
     });
     // replace single cell refs
     expr = expr.replace(/\$?([A-Z]{1,2})\$?(\d+)/g, (m,cl,rl)=>{
@@ -863,9 +1006,9 @@ function evaluateCell(id, visiting){
       if(v==="" || v===null || v===undefined) return "0";
       return typeof v === "string" ? JSON.stringify(v) : v;
     });
-    const fnNames = Object.keys(FN).concat(Object.keys(userFunctionsCache));
+    const fnNames = Object.keys(FN);
     const fn = new Function(...fnNames, "return (" + expr + ");");
-    let result = fn(...fnNames.map(k=>(FN[k] !== undefined ? FN[k] : userFunctionsCache[k])));
+    let result = fn(...fnNames.map(k=>FN[k]));
     if(typeof result === "number" && !isFinite(result)) result = "#ERROR!";
     computedCache[id] = result;
     visiting.delete(id);
@@ -879,6 +1022,52 @@ function evaluateCell(id, visiting){
 function recalcAll(){
   computedCache = {};
   Object.keys(sheet().data).forEach(id=>evaluateCell(id));
+}
+
+/* Evaluate a cell in an arbitrary (possibly non-active) sheet — used for
+   multi-sheet Excel export so every sheet's formulas resolve correctly
+   without disturbing the currently active sheet/UI state. */
+function evaluateCellInSheet(sheetName, id, cache, visiting){
+  cache = cache || {};
+  visiting = visiting || new Set();
+  if(cache.hasOwnProperty(id)) return cache[id];
+  const sh = workbook.sheets[sheetName];
+  const cell = sh.data[id];
+  if(!cell || cell.v===undefined || cell.v===""){ cache[id]=""; return ""; }
+  let raw = cell.v;
+  if(typeof raw !== "string" || !raw.startsWith("=")){ cache[id]=raw; return raw; }
+  if(visiting.has(id)){ cache[id]="#CIRCULAR!"; return cache[id]; }
+  visiting.add(id);
+  let expr = raw.slice(1);
+  try{
+    expr = expr.replace(/\$?([A-Z]{1,2})\$?(\d+):\$?([A-Z]{1,2})\$?(\d+)/g, (m,c1,r1,c2,r2)=>{
+      const ci1=colIndex(c1), ri1=parseInt(r1,10)-1, ci2=colIndex(c2), ri2=parseInt(r2,10)-1;
+      const rMin=Math.min(ri1,ri2), rMax=Math.max(ri1,ri2), cMin=Math.min(ci1,ci2), cMax=Math.max(ci1,ci2);
+      const rows=[];
+      for(let r=rMin; r<=rMax; r++){
+        const row=[];
+        for(let c=cMin; c<=cMax; c++){
+          const vid=cellId(c,r);
+          let v=evaluateCellInSheet(sheetName, vid, cache, visiting);
+          row.push(v);
+        }
+        rows.push(row);
+      }
+      return JSON.stringify(rows.length===1 ? rows[0] : rows);
+    });
+    expr = expr.replace(/\$?([A-Z]{1,2})\$?(\d+)/g, (m,cl,rl)=>{
+      const vid=cl+rl;
+      let v=evaluateCellInSheet(sheetName, vid, cache, visiting);
+      if(v===""||v===null||v===undefined) return "0";
+      return typeof v==="string"?JSON.stringify(v):v;
+    });
+    const fnNames=Object.keys(FN);
+    const fn=new Function(...fnNames,"return ("+expr+");");
+    let result=fn(...fnNames.map(k=>FN[k]));
+    if(typeof result==="number"&&!isFinite(result)) result="#ERROR!";
+    cache[id]=result; visiting.delete(id);
+    return result;
+  }catch(e){ cache[id]="#ERROR!"; visiting.delete(id); return "#ERROR!"; }
 }
 
 /* ================= NUMBER FORMAT ================= */
@@ -906,25 +1095,52 @@ function isNumericCell(id){
   return val!=="" && !isNaN(toNum(val));
 }
 
+/* ================= CONDITIONAL FORMATTING ================= */
+// Each rule: {r1,c1,r2,c2, type:'gt'|'lt'|'eq'|'between'|'colorscale'|'textcontains', value, value2, color, bg}
+function getSheetRules(){ const s=sheet(); if(!s.condFormats) s.condFormats=[]; return s.condFormats; }
+function condFormatStyleFor(id, r, c){
+  const rules = getSheetRules();
+  let extra = "";
+  const val = evaluateCell(id);
+  const num = toNum(val);
+  rules.forEach(rule=>{
+    if(r<rule.r1||r>rule.r2||c<rule.c1||c>rule.c2) return;
+    let hit=false;
+    if(rule.type==='gt') hit = !isNaN(num) && num>toNum(rule.value);
+    else if(rule.type==='lt') hit = !isNaN(num) && num<toNum(rule.value);
+    else if(rule.type==='eq') hit = String(val)===String(rule.value);
+    else if(rule.type==='between') hit = !isNaN(num) && num>=toNum(rule.value) && num<=toNum(rule.value2);
+    else if(rule.type==='textcontains') hit = String(val).toLowerCase().includes(String(rule.value).toLowerCase());
+    if(hit){
+      if(rule.bg) extra += `background:${rule.bg} !important;`;
+      if(rule.color) extra += `color:${rule.color} !important;`;
+    }
+  });
+  return extra;
+}
+
 /* ================= RENDER GRID ================= */
 const gridEl = document.getElementById('grid');
 function renderGrid(){
   const s = sheet();
   let html = "<thead><tr><th class='corner' id='cornerCell'></th>";
   for(let c=0;c<COLS;c++){
+    if(s.hiddenCols && s.hiddenCols[c]) continue;
     html += `<th class="colhead" data-c="${c}" style="width:${colW(c)}px;min-width:${colW(c)}px">${colLetter(c)}<div class="resizer" data-c="${c}"></div></th>`;
   }
   html += "</tr></thead><tbody>";
   for(let r=0;r<s.rows;r++){
+    if(s.hiddenRows && s.hiddenRows[r]) continue;
     html += `<tr style="height:${rowH(r)}px"><th class="rowhead" data-r="${r}" style="height:${rowH(r)}px">${r+1}<div class="resizer" data-r="${r}"></div></th>`;
     for(let c=0;c<COLS;c++){
+      if(s.hiddenCols && s.hiddenCols[c]) continue;
       const skip = isMergedAway(r,c);
       if(skip) continue;
       const span = mergeSpan(r,c);
       const id = cellId(c,r);
       const cell = s.data[id];
       const f = (cell && cell.f) || {};
-      const style = cellStyleString(f);
+      const style = cellStyleString(f) + condFormatStyleFor(id,r,c);
       const numeric = isNumericCell(id);
       html += `<td class="cell${numeric?' numeric':''}" data-r="${r}" data-c="${c}" style="width:${colW(c)}px;${style}"`+
               (span.rowspan>1?` rowspan="${span.rowspan}"`:"") + (span.colspan>1?` colspan="${span.colspan}"`:"") +
@@ -940,12 +1156,15 @@ function cellStyleString(f){
   let s = "";
   if(f.bold) s += "font-weight:700;";
   if(f.italic) s += "font-style:italic;";
-  if(f.underline) s += "text-decoration:underline;";
+  if(f.underline && f.strike) s += "text-decoration:underline line-through;";
+  else if(f.underline) s += "text-decoration:underline;";
+  else if(f.strike) s += "text-decoration:line-through;";
   if(f.color) s += `color:${f.color};`;
   if(f.bg && f.bg!=="transparent") s += `background:${f.bg};`;
   if(f.align) s += `text-align:${f.align};`;
   if(f.fontFamily) s += `font-family:${f.fontFamily};`;
   if(f.fontSize) s += `font-size:${f.fontSize}px;`;
+  if(f.wrap){ s += "white-space:normal;word-break:break-word;"; }
   if(f.border) s += f.border;
   return s;
 }
@@ -1009,6 +1228,8 @@ function syncToolbarState(){
   document.getElementById('boldBtn').classList.toggle('on', !!f.bold);
   document.getElementById('italicBtn').classList.toggle('on', !!f.italic);
   document.getElementById('underlineBtn').classList.toggle('on', !!f.underline);
+  const strikeBtn = document.getElementById('strikeBtn'); if(strikeBtn) strikeBtn.classList.toggle('on', !!f.strike);
+  const wrapBtn = document.getElementById('wrapBtn'); if(wrapBtn) wrapBtn.classList.toggle('on', !!f.wrap);
   document.getElementById('numFmtSel').value = f.numFmt || "general";
   document.getElementById('fontFamilySel').value = f.fontFamily || "'DM Sans',sans-serif";
   document.getElementById('fontSizeSel').value = f.fontSize || 11;
@@ -1016,6 +1237,7 @@ function syncToolbarState(){
   if(f.align==='center') document.getElementById('alignCenterBtn').classList.add('on');
   else if(f.align==='right') document.getElementById('alignRightBtn').classList.add('on');
   else document.getElementById('alignLeftBtn').classList.add('on');
+  syncUndoRedoButtons();
 }
 
 function renderAll(){
@@ -1025,6 +1247,7 @@ function renderAll(){
   renderTabs();
   document.getElementById('cellsInfo').textContent = `${COLS} cols · ${sheet().rows} rows`;
 }
+
 /* ================= SELECTION & NAVIGATION ================= */
 function setActive(r,c,extend){
   r = clamp(r,0,sheet().rows-1); c = clamp(c,0,COLS-1);
@@ -1075,7 +1298,6 @@ function placeCaretEnd(el){
 function commitEdit(moveDir){
   if(!editing) { finishEditUI(); return; }
   const id = cellId(active.c, active.r);
-  const oldVal = sheet().data[id] ? sheet().data[id].v : "";
   const val = editorEl.textContent;
   pushUndo();
   ensureCell(id).v = val;
@@ -1083,7 +1305,6 @@ function commitEdit(moveDir){
   computedCache = {};
   renderAll();
   markDirty();
-  fireOnEdit(id, oldVal, val);
   if(moveDir === 'down') setActive(active.r+1, active.c);
   else if(moveDir === 'right') setActive(active.r, active.c+1);
   else if(moveDir === 'up') setActive(Math.max(0,active.r-1), active.c);
@@ -1201,6 +1422,30 @@ gridEl.addEventListener('dblclick', (e)=>{
   const td = e.target.closest('td.cell');
   if(td){ startEdit(); }
 });
+
+/* Smart fill: detects numeric sequences, date sequences, and day/month name
+   sequences from the source range and continues the pattern; otherwise
+   copies the source value/formula as before. */
+const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const DAY_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+function detectSeriesStep(sourceCell, secondCell){
+  if(!sourceCell) return null;
+  const a = sourceCell.v;
+  if(secondCell && typeof a !== 'string'){} // noop, structure clarity
+  const an = toNum(a);
+  if(secondCell){
+    const bn = toNum(secondCell.v);
+    if(!isNaN(an) && !isNaN(bn)) return {kind:'number', step: bn-an};
+  }
+  if(!isNaN(an)) return {kind:'number', step:1};
+  const monthIdx = MONTH_NAMES.findIndex(m=>m.toLowerCase()===String(a).toLowerCase());
+  if(monthIdx>=0) return {kind:'month', idx:monthIdx};
+  const dayIdx = DAY_NAMES.findIndex(d=>d.toLowerCase()===String(a).toLowerCase());
+  if(dayIdx>=0) return {kind:'day', idx:dayIdx};
+  const d = new Date(a);
+  if(!isNaN(d.getTime()) && /\d{4}/.test(String(a))) return {kind:'date', base:d};
+  return null;
+}
 function doFill(){
   const r1=dragStart.r, c1=dragStart.c;
   const sourceId = cellId(c1,r1);
@@ -1208,20 +1453,35 @@ function doFill(){
   const r2=Math.min(selection.r1,selection.r2), r2b=Math.max(selection.r1,selection.r2);
   const c2=Math.min(selection.c1,selection.c2), c2b=Math.max(selection.c1,selection.c2);
   pushUndo();
-  const sourceVal = sourceCell ? toNum(sourceCell.v) : NaN;
+  // look at the cell right after source (in the same direction) to help detect step for numeric series
+  let secondCell = null;
+  if(r2b>r1 || r2>r1<r1){}
+  if(sheet().data[cellId(c1, r1+1)]) secondCell = sheet().data[cellId(c1, r1+1)];
+  else if(sheet().data[cellId(c1+1, r1)]) secondCell = sheet().data[cellId(c1+1, r1)];
+  const series = detectSeriesStep(sourceCell, secondCell);
   let i=0;
   for(let r=r2;r<=r2b;r++){
     for(let c=c2;c<=c2b;c++){
       if(r===r1 && c===c1) continue;
       const id = cellId(c,r);
       const nc = ensureCell(id);
-      if(sourceCell){
-        nc.f = JSON.parse(JSON.stringify(sourceCell.f||{}));
-        if(!isNaN(sourceVal) && typeof sourceCell.v !== 'string' || (typeof sourceCell.v==='string' && !sourceCell.v.startsWith('=') && !isNaN(sourceVal))){
-          nc.v = String(sourceVal + (r>r1? (r-r1) : (c-c1)));
-        } else {
-          nc.v = sourceCell.v;
-        }
+      if(!sourceCell){ i++; continue; }
+      nc.f = JSON.parse(JSON.stringify(sourceCell.f||{}));
+      const offset = (r>r1? (r-r1) : (c-c1));
+      const isFormula = typeof sourceCell.v === 'string' && sourceCell.v.startsWith('=');
+      if(isFormula){
+        nc.v = sourceCell.v; // simple copy for formulas (no relative-ref shifting)
+      } else if(series && series.kind==='number'){
+        nc.v = String(toNum(sourceCell.v) + series.step*offset);
+      } else if(series && series.kind==='month'){
+        nc.v = MONTH_NAMES[(series.idx+offset)%12];
+      } else if(series && series.kind==='day'){
+        nc.v = DAY_NAMES[(series.idx+offset)%7];
+      } else if(series && series.kind==='date'){
+        const dt = new Date(series.base); dt.setDate(dt.getDate()+offset);
+        nc.v = dt.toISOString().slice(0,10);
+      } else {
+        nc.v = sourceCell.v;
       }
       i++;
     }
@@ -1246,6 +1506,7 @@ document.addEventListener('keydown', (e)=>{
   if(ctrl && e.key.toLowerCase()==='b'){ e.preventDefault(); toggleFormat('bold'); return; }
   if(ctrl && e.key.toLowerCase()==='i'){ e.preventDefault(); toggleFormat('italic'); return; }
   if(ctrl && e.key.toLowerCase()==='u'){ e.preventDefault(); toggleFormat('underline'); return; }
+  if(ctrl && e.shiftKey && e.key.toLowerCase()==='x'){ e.preventDefault(); toggleFormat('strike'); return; }
   if(ctrl && e.key.toLowerCase()==='c'){ e.preventDefault(); copySelection(false); return; }
   if(ctrl && e.key.toLowerCase()==='x'){ e.preventDefault(); copySelection(true); return; }
   if(ctrl && e.key.toLowerCase()==='v'){ e.preventDefault(); pasteSelection(); return; }
@@ -1282,6 +1543,7 @@ function forEachSelected(cb){
   const c1=Math.min(selection.c1,selection.c2), c2=Math.max(selection.c1,selection.c2);
   for(let r=r1;r<=r2;r++) for(let c=c1;c<=c2;c++) cb(cellId(c,r), r, c);
 }
+
 /* ================= COPY / PASTE ================= */
 function copySelection(cut){
   const r1=Math.min(selection.r1,selection.r2), r2=Math.max(selection.r1,selection.r2);
@@ -1320,6 +1582,21 @@ function pasteSelection(){
   }
   computedCache={}; renderAll(); markDirty();
 }
+function pasteSpecialValues(){
+  if(!clipboard) return;
+  pushUndo();
+  const destR = active.r, destC = active.c;
+  clipboard.cells.forEach((row,ri)=>{
+    row.forEach((cellData,ci)=>{
+      const id = cellId(destC+ci, destR+ri);
+      if(destR+ri >= sheet().rows) return;
+      const v = evaluateCellInSheet(workbook.current, cellId(clipboard.c1+ci, clipboard.r1+ri));
+      ensureCell(id).v = String(v);
+    });
+  });
+  computedCache={}; renderAll(); markDirty();
+  showToast("Pasted values only");
+}
 document.addEventListener('paste', (e)=>{
   if(editing || document.activeElement===formulaInput) return;
   const text = (e.clipboardData || window.clipboardData).getData('text');
@@ -1337,6 +1614,7 @@ document.addEventListener('paste', (e)=>{
   });
   computedCache={}; renderAll(); markDirty();
 });
+
 /* ================= FORMATTING ================= */
 function applyFormat(mutator){
   pushUndo();
@@ -1355,6 +1633,9 @@ function toggleFormat(prop){
 document.getElementById('boldBtn').onclick = ()=>toggleFormat('bold');
 document.getElementById('italicBtn').onclick = ()=>toggleFormat('italic');
 document.getElementById('underlineBtn').onclick = ()=>toggleFormat('underline');
+document.getElementById('strikeBtn').onclick = ()=>toggleFormat('strike');
+document.getElementById('wrapBtn').onclick = ()=>toggleFormat('wrap');
+document.getElementById('condFormatBtn').onclick = ()=>openCondFormatDialog();
 document.getElementById('alignLeftBtn').onclick = ()=>applyFormat(f=>f.align='left');
 document.getElementById('alignCenterBtn').onclick = ()=>applyFormat(f=>f.align='center');
 document.getElementById('alignRightBtn').onclick = ()=>applyFormat(f=>f.align='right');
@@ -1363,6 +1644,8 @@ document.getElementById('borderClearBtn').onclick = ()=>applyFormat(f=>f.border=
 document.getElementById('fontFamilySel').onchange = (e)=>applyFormat(f=>f.fontFamily=e.target.value);
 document.getElementById('fontSizeSel').onchange = (e)=>applyFormat(f=>f.fontSize=parseInt(e.target.value,10));
 document.getElementById('numFmtSel').onchange = (e)=>applyFormat(f=>f.numFmt=e.target.value);
+document.getElementById('undoBtn').onclick = ()=>undo();
+document.getElementById('redoBtn').onclick = ()=>redo();
 document.getElementById('sumBtn').onclick = ()=>{
   const r1=Math.min(selection.r1,selection.r2), c1=Math.min(selection.c1,selection.c2);
   const r2=Math.max(selection.r1,selection.r2), c2=Math.max(selection.c1,selection.c2);
@@ -1390,26 +1673,89 @@ function doUnmerge(){
   renderAll(); markDirty();
 }
 
-/* Color pickers */
-function buildSwatchPop(popEl, onPick, includeNone){
+/* Color pickers — swatch grid + recent colors (last 8 used) + opacity slider */
+const RECENT_KEY_TEXT = "prosheet_recent_text_colors";
+const RECENT_KEY_FILL = "prosheet_recent_fill_colors";
+function loadRecentColors(key){ try{ return JSON.parse(localStorage.getItem(key))||[]; }catch(e){ return []; } }
+function pushRecentColor(key, color){
+  if(!color || color==='transparent') return;
+  let list = loadRecentColors(key);
+  list = list.filter(c=>c.toLowerCase()!==color.toLowerCase());
+  list.unshift(color);
+  list = list.slice(0,8);
+  localStorage.setItem(key, JSON.stringify(list));
+}
+function hexToRgba(hex, alpha){
+  hex = hex.replace('#','');
+  if(hex.length===3) hex = hex.split('').map(c=>c+c).join('');
+  const r = parseInt(hex.slice(0,2),16), g = parseInt(hex.slice(2,4),16), b = parseInt(hex.slice(4,6),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+function buildSwatchPop(popEl, onPick, includeNone, recentKey){
   popEl.innerHTML = '<div class="swatch-grid"></div>';
   const grid = popEl.querySelector('.swatch-grid');
   COLORS.filter(c=>c!=='transparent').forEach(c=>{
     const sw = document.createElement('div');
     sw.className='swatch'; sw.style.background=c; sw.title=c;
-    sw.onclick = ()=>{ onPick(c); popEl.classList.remove('show'); };
+    sw.onclick = ()=>{ applyPick(c); };
     grid.appendChild(sw);
   });
   const custom = document.createElement('div');
   custom.className='swatch-custom';
   custom.innerHTML = `<input type="color" value="#6c8cff"><span style="font-size:11px;color:var(--text-dim)">Custom</span>`;
-  custom.querySelector('input').oninput = (e)=>{ onPick(e.target.value); popEl.classList.remove('show'); };
+  const customInput = custom.querySelector('input');
+  customInput.oninput = (e)=>{ applyPick(e.target.value); };
   grid.parentElement.appendChild(custom);
+
+  // opacity slider — applies to whatever color is currently picked (base hex kept on the popup)
+  const opacityWrap = document.createElement('div');
+  opacityWrap.className = 'swatch-opacity-wrap';
+  opacityWrap.innerHTML = `<span style="font-size:10px;color:var(--text-dim);">Opacity</span><input type="range" min="10" max="100" value="100" class="opacityRange"><span class="opacity-val">100%</span>`;
+  grid.parentElement.appendChild(opacityWrap);
+  const opacityRange = opacityWrap.querySelector('.opacityRange');
+  const opacityVal = opacityWrap.querySelector('.opacity-val');
+  popEl._lastBaseColor = popEl._lastBaseColor || "#6c8cff";
+  opacityRange.oninput = ()=>{
+    opacityVal.textContent = opacityRange.value + "%";
+    const alpha = (parseInt(opacityRange.value,10)/100).toFixed(2);
+    const finalColor = popEl._lastBaseColor.startsWith('#') ? hexToRgba(popEl._lastBaseColor, alpha) : popEl._lastBaseColor;
+    onPick(finalColor);
+    if(recentKey) pushRecentColor(recentKey, popEl._lastBaseColor);
+  };
+
+  function applyPick(c){
+    popEl._lastBaseColor = c;
+    opacityRange.value = 100; opacityVal.textContent = "100%";
+    onPick(c);
+    if(recentKey) pushRecentColor(recentKey, c);
+    popEl.classList.remove('show');
+  }
+
   if(includeNone){
     const none = document.createElement('div');
     none.className='swatch-none'; none.textContent='No fill';
     none.onclick = ()=>{ onPick('transparent'); popEl.classList.remove('show'); };
     grid.parentElement.appendChild(none);
+  }
+
+  // recent colors row, most-recently-used first
+  if(recentKey){
+    const recent = loadRecentColors(recentKey);
+    if(recent.length){
+      const label = document.createElement('div');
+      label.className = 'swatch-recent-label';
+      label.textContent = 'Recent';
+      grid.parentElement.insertBefore(label, custom);
+      const recentGrid = document.createElement('div');
+      recentGrid.className = 'swatch-grid';
+      recent.forEach(c=>{
+        const sw = document.createElement('div');
+        sw.className='swatch'; sw.style.background=c; sw.title=c;
+        sw.onclick = ()=>{ applyPick(c); };
+        recentGrid.appendChild(sw);
+      });
+      grid.parentElement.insertBefore(recentGrid, custom);
+    }
   }
 }
 const textColorPop = document.getElementById('textColorPop');
@@ -1417,13 +1763,13 @@ const fillColorPop = document.getElementById('fillColorPop');
 buildSwatchPop(textColorPop, (c)=>{
   applyFormat(f=>f.color=c);
   document.getElementById('textColorCurrent').style.background=c;
-}, false);
+}, false, RECENT_KEY_TEXT);
 buildSwatchPop(fillColorPop, (c)=>{
   applyFormat(f=>f.bg=c);
   document.getElementById('fillColorCurrent').style.background=c;
-}, true);
-document.getElementById('textColorBtn').onclick = (e)=>{ e.stopPropagation(); closeAllPops(); textColorPop.classList.toggle('show'); };
-document.getElementById('fillColorBtn').onclick = (e)=>{ e.stopPropagation(); closeAllPops(); fillColorPop.classList.toggle('show'); };
+}, true, RECENT_KEY_FILL);
+document.getElementById('textColorBtn').onclick = (e)=>{ e.stopPropagation(); closeAllPops(); buildSwatchPop(textColorPop,(c)=>{applyFormat(f=>f.color=c);document.getElementById('textColorCurrent').style.background=c;}, false, RECENT_KEY_TEXT); textColorPop.classList.toggle('show'); };
+document.getElementById('fillColorBtn').onclick = (e)=>{ e.stopPropagation(); closeAllPops(); buildSwatchPop(fillColorPop,(c)=>{applyFormat(f=>f.bg=c);document.getElementById('fillColorCurrent').style.background=c;}, true, RECENT_KEY_FILL); fillColorPop.classList.toggle('show'); };
 function closeAllPops(){ textColorPop.classList.remove('show'); fillColorPop.classList.remove('show'); }
 document.addEventListener('click', ()=>{ closeAllPops(); closeAllMenus(); });
 
@@ -1444,9 +1790,12 @@ document.querySelectorAll('.dropdown-item').forEach(di=>{
 function handleAction(act){
   switch(act){
     case 'new': addSheet(); break;
+    case 'addMultipleSheets': openAddMultipleSheetsDialog(); break;
     case 'save': saveWorkbook(true); break;
     case 'importCsv': document.getElementById('csvFileInput').click(); break;
+    case 'importXlsx': document.getElementById('xlsxFileInput').click(); break;
     case 'exportCsv': exportCsv(); break;
+    case 'exportXlsx': exportXlsx(); break;
     case 'exportJson': exportJson(); break;
     case 'print': window.print(); break;
     case 'undo': undo(); break;
@@ -1454,12 +1803,18 @@ function handleAction(act){
     case 'cut': copySelection(true); break;
     case 'copy': copySelection(false); break;
     case 'paste': pasteSelection(); break;
+    case 'pasteValues': pasteSpecialValues(); break;
     case 'clear': clearSelection(); break;
     case 'find': openFindReplace(); break;
     case 'rowAbove': insertRow(active.r); break;
     case 'rowBelow': insertRow(active.r+1); break;
     case 'colLeft': insertCol(active.c); break;
     case 'colRight': insertCol(active.c+1); break;
+    case 'deleteRow': deleteRow(active.r); break;
+    case 'deleteCol': deleteCol(active.c); break;
+    case 'hideRow': hideRow(active.r); break;
+    case 'hideCol': hideCol(active.c); break;
+    case 'unhideAll': unhideAll(); break;
     case 'chart': openChartDialog(); break;
     case 'fmtGeneral': applyFormat(f=>f.numFmt='general'); break;
     case 'fmtNumber': applyFormat(f=>f.numFmt='number'); break;
@@ -1470,12 +1825,17 @@ function handleAction(act){
     case 'unmergeCells': doUnmerge(); break;
     case 'freezeRow': toggleFreezeRow(); break;
     case 'freezeCol': toggleFreezeCol(); break;
+    case 'wrapText': toggleFormat('wrap'); break;
+    case 'strike': toggleFormat('strike'); break;
+    case 'condFormat': openCondFormatDialog(); break;
+    case 'namedRange': openNamedRangeDialog(); break;
     case 'sortAsc': sortRange(true); break;
     case 'sortDesc': sortRange(false); break;
-    case 'openAppsScript': openScriptEditor(); break;
+    case 'duplicateSheet': duplicateSheet(); break;
   }
 }
-/* ================= ROWS/COLS INSERT ================= */
+
+/* ================= ROWS/COLS INSERT / DELETE / HIDE ================= */
 function insertRow(atR){
   pushUndo();
   const s = sheet();
@@ -1501,12 +1861,59 @@ function insertCol(atC){
   s.data = newData;
   renderAll(); markDirty();
 }
+function deleteRow(atR){
+  pushUndo();
+  const s = sheet();
+  const newData = {};
+  Object.keys(s.data).forEach(id=>{
+    const p = parseId(id);
+    if(p.r===atR) return;
+    const nr = p.r>atR ? p.r-1 : p.r;
+    newData[cellId(p.c,nr)] = s.data[id];
+  });
+  s.data = newData; s.rows = Math.max(1, s.rows-1);
+  renderAll(); markDirty();
+}
+function deleteCol(atC){
+  pushUndo();
+  const s = sheet();
+  const newData = {};
+  Object.keys(s.data).forEach(id=>{
+    const p = parseId(id);
+    if(p.c===atC) return;
+    const nc = p.c>atC ? p.c-1 : p.c;
+    newData[cellId(nc,p.r)] = s.data[id];
+  });
+  s.data = newData;
+  renderAll(); markDirty();
+}
+function hideRow(r){
+  const s = sheet(); s.hiddenRows = s.hiddenRows || {};
+  s.hiddenRows[r] = true;
+  renderAll(); markDirty(); showToast("Row hidden");
+}
+function hideCol(c){
+  const s = sheet(); s.hiddenCols = s.hiddenCols || {};
+  s.hiddenCols[c] = true;
+  renderAll(); markDirty(); showToast("Column hidden");
+}
+function unhideAll(){
+  const s = sheet(); s.hiddenRows = {}; s.hiddenCols = {};
+  renderAll(); markDirty(); showToast("All rows/columns unhidden");
+}
 
 /* ================= FREEZE ================= */
 function toggleFreezeRow(){ sheet().frozenRow = sheet().frozenRow ? 0 : 1; showToast(sheet().frozenRow? "Row 1 frozen":"Unfrozen"); applyFreezeStyles(); }
 function toggleFreezeCol(){ sheet().frozenCol = sheet().frozenCol ? 0 : 1; showToast(sheet().frozenCol? "Column A frozen":"Unfrozen"); applyFreezeStyles(); }
 function applyFreezeStyles(){
-  // simple visual: sticky already applied to headers; extend to frozen row/col could be added incrementally
+  renderGrid();
+  const s = sheet();
+  if(s.frozenRow){
+    gridEl.querySelectorAll('tbody tr:first-child th, tbody tr:first-child td').forEach(el=>{
+      el.style.position='sticky'; el.style.top=DEFAULT_ROW_H+'px'; el.style.zIndex=15; el.style.background = el.style.background || 'var(--surface)';
+    });
+  }
+  renderSelectionVisual();
 }
 
 /* ================= SORT ================= */
@@ -1565,29 +1972,156 @@ function openFindReplace(){
     showToast(`Replaced in ${count} cell(s)`);
   };
 }
+
+/* ================= CONDITIONAL FORMATTING DIALOG ================= */
+function openCondFormatDialog(){
+  const r1=Math.min(selection.r1,selection.r2), r2=Math.max(selection.r1,selection.r2);
+  const c1=Math.min(selection.c1,selection.c2), c2=Math.max(selection.c1,selection.c2);
+  showDialog(`
+    <h3>Conditional formatting</h3>
+    <label>Applies to</label><input value="${cellId(c1,r1)}:${cellId(c2,r2)}" disabled>
+    <label>Rule</label>
+    <select id="dlgRuleType">
+      <option value="gt">Value greater than</option>
+      <option value="lt">Value less than</option>
+      <option value="eq">Value equal to</option>
+      <option value="between">Value between</option>
+      <option value="textcontains">Text contains</option>
+    </select>
+    <label>Value</label><input id="dlgRuleVal" placeholder="e.g. 100">
+    <label id="dlgRuleVal2Label" style="display:none">Value 2 (upper bound)</label>
+    <input id="dlgRuleVal2" style="display:none" placeholder="e.g. 500">
+    <label>Highlight color</label>
+    <input id="dlgRuleColor" type="color" value="#4ade80" style="height:36px;">
+    <div class="dialog-actions">
+      <button class="btn" id="dlgClearRules" style="color:var(--danger)">Clear rules here</button>
+      <button class="btn" id="dlgCancel">Cancel</button>
+      <button class="btn primary" id="dlgApply">Apply</button>
+    </div>
+  `);
+  document.getElementById('dlgRuleType').onchange = (e)=>{
+    const show = e.target.value==='between';
+    document.getElementById('dlgRuleVal2').style.display = show? 'block':'none';
+    document.getElementById('dlgRuleVal2Label').style.display = show? 'block':'none';
+  };
+  document.getElementById('dlgCancel').onclick = closeDialog;
+  document.getElementById('dlgClearRules').onclick = ()=>{
+    const s = sheet();
+    s.condFormats = getSheetRules().filter(r=> !(r.r1===r1 && r.c1===c1 && r.r2===r2 && r.c2===c2));
+    renderAll(); markDirty(); closeDialog();
+    showToast("Rules cleared");
+  };
+  document.getElementById('dlgApply').onclick = ()=>{
+    const type = document.getElementById('dlgRuleType').value;
+    const value = document.getElementById('dlgRuleVal').value;
+    const value2 = document.getElementById('dlgRuleVal2').value;
+    const color = document.getElementById('dlgRuleColor').value;
+    pushUndo();
+    getSheetRules().push({r1,c1,r2,c2,type,value,value2,bg:color+"55",color:color});
+    renderAll(); markDirty(); closeDialog();
+    showToast("Rule applied");
+  };
+}
+
+/* ================= NAMED RANGES (lightweight) ================= */
+function openNamedRangeDialog(){
+  const r1=Math.min(selection.r1,selection.r2), r2=Math.max(selection.r1,selection.r2);
+  const c1=Math.min(selection.c1,selection.c2), c2=Math.max(selection.c1,selection.c2);
+  showDialog(`
+    <h3>Name this range</h3>
+    <label>Range</label><input value="${cellId(c1,r1)}:${cellId(c2,r2)}" disabled>
+    <label>Name</label><input id="dlgRangeName" placeholder="e.g. SalesData">
+    <div class="dialog-actions"><button class="btn" id="dlgCancel">Cancel</button><button class="btn primary" id="dlgOk">Save name</button></div>
+  `);
+  document.getElementById('dlgCancel').onclick = closeDialog;
+  document.getElementById('dlgOk').onclick = ()=>{
+    const name = document.getElementById('dlgRangeName').value.trim();
+    if(name){
+      workbook.namedRanges = workbook.namedRanges || {};
+      workbook.namedRanges[name] = {sheet:workbook.current, r1,c1,r2,c2};
+      showToast(`Named range "${name}" saved`);
+      markDirty();
+    }
+    closeDialog();
+  };
+}
+
+/* ================= DUPLICATE SHEET ================= */
+function duplicateSheet(){
+  const src = workbook.current;
+  let name = src+"_copy", k=2;
+  while(workbook.sheets[name]){ name = src+"_copy"+k; k++; }
+  workbook.sheets[name] = JSON.parse(JSON.stringify(workbook.sheets[src]));
+  workbook.order.splice(workbook.order.indexOf(src)+1, 0, name);
+  workbook.current = name;
+  computedCache={}; renderAll(); markDirty();
+  showToast("Sheet duplicated");
+}
+
 /* ================= CHART ================= */
+let currentChartType = 'bar';
 function openChartDialog(){
+  renderChartDialogBody();
+}
+function renderChartDialogBody(){
   const r1=Math.min(selection.r1,selection.r2), r2=Math.max(selection.r1,selection.r2);
   const c1=Math.min(selection.c1,selection.c2), c2=Math.max(selection.c1,selection.c2);
   const labels = [], values = [];
   for(let r=r1;r<=r2;r++){
     const lid = cellId(c1,r);
-    const vid = cellId(c2>c1? c1+1 : c1, r);
     labels.push(String(evaluateCell(lid)));
     const v = toNum(evaluateCell(c2>c1? cellId(c1+1,r) : lid));
     values.push(isNaN(v)?0:v);
   }
   const max = Math.max(...values,1);
-  let bars = values.map((v,i)=>`
-    <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;">
-      <div style="width:100%;background:linear-gradient(180deg,var(--accent),#9b6cff);border-radius:4px 4px 0 0;height:${(v/max*140)||0}px;"></div>
-      <div style="font-size:9.5px;color:var(--text-faint);font-family:'DM Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60px;">${escapeHtml(labels[i])}</div>
-    </div>`).join('');
+  let chartHtml = "";
+  if(currentChartType==='bar'){
+    chartHtml = `<div style="display:flex;align-items:flex-end;gap:6px;height:160px;padding:10px 4px;background:var(--surface);border-radius:8px;border:1px solid var(--border);">` +
+      values.map((v,i)=>`
+      <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;">
+        <div style="width:100%;background:linear-gradient(180deg,var(--accent),#9b6cff);border-radius:4px 4px 0 0;height:${(v/max*140)||0}px;"></div>
+        <div style="font-size:9.5px;color:var(--text-faint);font-family:'DM Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60px;">${escapeHtml(labels[i])}</div>
+      </div>`).join('') + `</div>`;
+  } else if(currentChartType==='line'){
+    const w=280,h=150,pad=10;
+    const stepX = values.length>1 ? (w-2*pad)/(values.length-1) : 0;
+    const pts = values.map((v,i)=>`${pad+i*stepX},${h-pad-(v/max*(h-2*pad))}`).join(' ');
+    chartHtml = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;">
+      <svg width="100%" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+        <polyline points="${pts}" fill="none" stroke="#6c8cff" stroke-width="2.5"/>
+        ${values.map((v,i)=>`<circle cx="${pad+i*stepX}" cy="${h-pad-(v/max*(h-2*pad))}" r="3" fill="#9b6cff"/>`).join('')}
+      </svg>
+    </div>`;
+  } else if(currentChartType==='pie'){
+    const total = values.reduce((a,b)=>a+b,0) || 1;
+    let angle=0;
+    const palette=['#6c8cff','#9b6cff','#4ade80','#ffb454','#ff6b6b','#4dd0e1','#ff7ac6','#f1c40f'];
+    const slices = values.map((v,i)=>{
+      const frac = v/total, start=angle, end=angle+frac*360; angle=end;
+      const large = (end-start)>180?1:0;
+      const toXY=(deg)=>{ const rad=(deg-90)*Math.PI/180; return [60+50*Math.cos(rad), 60+50*Math.sin(rad)]; };
+      const [x1,y1]=toXY(start), [x2,y2]=toXY(end);
+      return `<path d="M60,60 L${x1},${y1} A50,50 0 ${large} 1 ${x2},${y2} Z" fill="${palette[i%palette.length]}"/>`;
+    }).join('');
+    const legend = labels.map((l,i)=>`<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text-dim);"><span style="width:9px;height:9px;border-radius:2px;background:${palette[i%palette.length]};display:inline-block;"></span>${escapeHtml(l)}</div>`).join('');
+    chartHtml = `<div style="display:flex;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;">
+      <svg width="120" height="120" viewBox="0 0 120 120">${slices}</svg>
+      <div style="display:flex;flex-direction:column;gap:4px;">${legend}</div>
+    </div>`;
+  }
   showDialog(`
     <h3>Chart from selection</h3>
-    <div style="display:flex;align-items:flex-end;gap:6px;height:160px;padding:10px 4px;background:var(--surface);border-radius:8px;border:1px solid var(--border);">${bars}</div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;">
+      <button class="btn${currentChartType==='bar'?' primary':''}" id="chtBar">Bar</button>
+      <button class="btn${currentChartType==='line'?' primary':''}" id="chtLine">Line</button>
+      <button class="btn${currentChartType==='pie'?' primary':''}" id="chtPie">Pie</button>
+    </div>
+    ${chartHtml}
     <div class="dialog-actions"><button class="btn primary" id="dlgClose">Close</button></div>
   `);
+  document.getElementById('chtBar').onclick = ()=>{ currentChartType='bar'; renderChartDialogBody(); };
+  document.getElementById('chtLine').onclick = ()=>{ currentChartType='line'; renderChartDialogBody(); };
+  document.getElementById('chtPie').onclick = ()=>{ currentChartType='pie'; renderChartDialogBody(); };
   document.getElementById('dlgClose').onclick = closeDialog;
 }
 document.getElementById('chartBtn').onclick = openChartDialog;
@@ -1615,14 +2149,26 @@ gridEl.addEventListener('contextmenu', (e)=>{
     <div class="dropdown-item" data-act="cut">Cut</div>
     <div class="dropdown-item" data-act="copy">Copy</div>
     <div class="dropdown-item" data-act="paste">Paste</div>
+    <div class="dropdown-item" data-act="pasteValues">Paste values only</div>
     <div class="dropdown-sep"></div>
     <div class="dropdown-item" data-act="rowAbove">Insert row above</div>
     <div class="dropdown-item" data-act="rowBelow">Insert row below</div>
     <div class="dropdown-item" data-act="colLeft">Insert column left</div>
     <div class="dropdown-item" data-act="colRight">Insert column right</div>
     <div class="dropdown-sep"></div>
+    <div class="dropdown-item" data-act="deleteRow">Delete row</div>
+    <div class="dropdown-item" data-act="deleteCol">Delete column</div>
+    <div class="dropdown-item" data-act="hideRow">Hide row</div>
+    <div class="dropdown-item" data-act="hideCol">Hide column</div>
+    <div class="dropdown-item" data-act="unhideAll">Unhide all</div>
+    <div class="dropdown-sep"></div>
     <div class="dropdown-item" data-act="mergeCells">Merge cells</div>
     <div class="dropdown-item" data-act="unmergeCells">Unmerge cells</div>
+    <div class="dropdown-item" data-act="wrapText">Toggle wrap text</div>
+    <div class="dropdown-item" data-act="strike">Toggle strikethrough</div>
+    <div class="dropdown-sep"></div>
+    <div class="dropdown-item" data-act="condFormat">Conditional formatting…</div>
+    <div class="dropdown-item" data-act="namedRange">Name this range…</div>
     <div class="dropdown-sep"></div>
     <div class="dropdown-item" data-act="clear">Clear cells</div>
   `;
@@ -1656,8 +2202,55 @@ function addSheet(){
   workbook.current = name;
   selection={r1:0,c1:0,r2:0,c2:0}; active={r:0,c:0};
   computedCache={}; renderAll(); markDirty();
+  return name;
 }
 document.getElementById('addSheetBtn').onclick = addSheet;
+
+/* Add several sheets at once, e.g. "Jan, Feb, Mar" or "Sheet1..Sheet5" */
+function openAddMultipleSheetsDialog(){
+  showDialog(`
+    <h3>Add multiple sheets</h3>
+    <label>How many sheets?</label>
+    <input id="dlgSheetCount" type="number" min="1" max="50" value="3">
+    <label>Names (comma-separated, optional — overrides count)</label>
+    <input id="dlgSheetNames" placeholder="e.g. Jan, Feb, Mar">
+    <div class="dialog-actions">
+      <button class="btn" id="dlgCancel">Cancel</button>
+      <button class="btn primary" id="dlgOk">Add sheets</button>
+    </div>
+  `);
+  document.getElementById('dlgCancel').onclick = closeDialog;
+  document.getElementById('dlgOk').onclick = ()=>{
+    const namesRaw = document.getElementById('dlgSheetNames').value.trim();
+    let names = [];
+    if(namesRaw){
+      names = namesRaw.split(',').map(s=>s.trim()).filter(Boolean);
+    } else {
+      const count = clamp(parseInt(document.getElementById('dlgSheetCount').value,10) || 1, 1, 50);
+      for(let i=0;i<count;i++) names.push(null); // auto-named
+    }
+    pushUndo();
+    let lastName = null;
+    names.forEach(n=>{
+      let name = n;
+      if(!name){
+        let k=1; name = "Sheet"+(workbook.order.length+1);
+        while(workbook.sheets[name]){ k++; name="Sheet"+(workbook.order.length+k); }
+      } else if(workbook.sheets[name]){
+        let k=2; const base=name;
+        while(workbook.sheets[name]){ name = base+"_"+k; k++; }
+      }
+      workbook.sheets[name] = makeSheet();
+      workbook.order.push(name);
+      lastName = name;
+    });
+    if(lastName) workbook.current = lastName;
+    selection={r1:0,c1:0,r2:0,c2:0}; active={r:0,c:0};
+    computedCache={}; renderAll(); markDirty(); closeDialog();
+    showToast(`Added ${names.length} sheet(s)`);
+  };
+}
+
 function renameSheetPrompt(name){
   showDialog(`
     <h3>Rename sheet</h3>
@@ -1682,10 +2275,12 @@ function renameOrDeleteSheet(name){
     <h3>${escapeHtml(name)}</h3>
     <div class="dialog-actions">
       <button class="btn" id="dlgRename">Rename</button>
+      <button class="btn" id="dlgDuplicate">Duplicate</button>
       <button class="btn" id="dlgDelete" style="color:var(--danger)">Delete</button>
     </div>
   `);
   document.getElementById('dlgRename').onclick = ()=>{ closeDialog(); renameSheetPrompt(name); };
+  document.getElementById('dlgDuplicate').onclick = ()=>{ closeDialog(); workbook.current=name; duplicateSheet(); };
   document.getElementById('dlgDelete').onclick = ()=>{
     if(workbook.order.length<=1){ showToast("Can't delete the only sheet"); closeDialog(); return; }
     delete workbook.sheets[name];
@@ -1694,6 +2289,7 @@ function renameOrDeleteSheet(name){
     closeDialog(); computedCache={}; renderAll(); markDirty();
   };
 }
+
 /* ================= IMPORT / EXPORT ================= */
 function exportCsv(){
   const s = sheet();
@@ -1720,6 +2316,42 @@ function csvEscape(v){
 function exportJson(){
   downloadFile(JSON.stringify(workbook,null,2), (document.getElementById('filename').value||"sheet")+".json", "application/json");
 }
+
+/* --- Excel (.xlsx) export: writes EVERY sheet in the workbook into one
+   real Excel file, each Pro Sheet tab becoming its own Excel worksheet,
+   including merged cell ranges. Requires the SheetJS (xlsx) library. --- */
+function exportXlsx(){
+  if(typeof XLSX === 'undefined'){ showToast("Excel library failed to load — check your connection"); return; }
+  const wb = XLSX.utils.book_new();
+  workbook.order.forEach(name=>{
+    const sh = workbook.sheets[name];
+    let maxC = 0;
+    Object.keys(sh.data).forEach(id=>{ const p=parseId(id); if(p.c>maxC) maxC=p.c; });
+    const cache = {};
+    const aoa = [];
+    for(let r=0; r<sh.rows; r++){
+      const row = [];
+      let rowHasData = false;
+      for(let c=0; c<=maxC; c++){
+        const id = cellId(c,r);
+        const v = evaluateCellInSheet(name, id, cache);
+        if(v!=="") rowHasData = true;
+        row.push(v);
+      }
+      if(rowHasData || aoa.length>0) aoa.push(row);
+    }
+    const ws = XLSX.utils.aoa_to_sheet(aoa.length ? aoa : [[""]]);
+    if(sh.merges && sh.merges.length){
+      ws['!merges'] = sh.merges.map(m=>({ s:{r:m.r1,c:m.c1}, e:{r:m.r2,c:m.c2} }));
+    }
+    // Excel sheet names: max 31 chars, no []:*?/\\
+    let safeName = name.replace(/[\[\]:*?\/\\]/g,'').slice(0,31) || "Sheet";
+    XLSX.utils.book_append_sheet(wb, ws, safeName);
+  });
+  XLSX.writeFile(wb, (document.getElementById('filename').value||"sheet")+".xlsx");
+  showToast("Downloaded Excel workbook ("+workbook.order.length+" sheet"+(workbook.order.length>1?'s':'')+")");
+}
+
 function downloadFile(content, name, type){
   const blob = new Blob([content], {type});
   const url = URL.createObjectURL(blob);
@@ -1773,16 +2405,76 @@ function parseCsv(text){
   if(field.length || row.length){ row.push(field); rows.push(row); }
   return rows;
 }
+
+/* --- Excel (.xlsx) import: reads EVERY worksheet from the uploaded file
+   and rebuilds the whole Pro Sheet workbook, one tab per Excel sheet,
+   including merged cell ranges. Replaces the current workbook. --- */
+const xlsxInput = document.createElement('input');
+xlsxInput.type='file'; xlsxInput.accept='.xlsx,.xls'; xlsxInput.id='xlsxFileInput'; xlsxInput.style.display='none';
+document.body.appendChild(xlsxInput);
+xlsxInput.addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  if(typeof XLSX === 'undefined'){ showToast("Excel library failed to load — check your connection"); xlsxInput.value=""; return; }
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    try{
+      pushUndo();
+      const data = new Uint8Array(ev.target.result);
+      const xwb = XLSX.read(data, {type:'array'});
+      const newSheets = {}, order = [];
+      xwb.SheetNames.forEach(sname=>{
+        const ws = xwb.Sheets[sname];
+        const aoa = XLSX.utils.sheet_to_json(ws, {header:1, raw:false, defval:""});
+        const newSheet = makeSheet();
+        aoa.forEach((row,ri)=>{
+          row.forEach((val,ci)=>{
+            if(ci<COLS && val!=="" && val!==null && val!==undefined){
+              newSheet.data[cellId(ci,ri)] = {v:String(val), f:{}};
+            }
+          });
+        });
+        newSheet.rows = Math.max(DEFAULT_ROWS, aoa.length+5);
+        if(ws['!merges']){
+          newSheet.merges = ws['!merges'].map(m=>({r1:m.s.r,c1:m.s.c,r2:m.e.r,c2:m.e.c}));
+        }
+        let uniqueName = sname || ("Sheet"+(order.length+1));
+        if(newSheets[uniqueName]){
+          let base = uniqueName, k=2;
+          while(newSheets[uniqueName]){ uniqueName = base+"_"+k; k++; }
+        }
+        newSheets[uniqueName] = newSheet;
+        order.push(uniqueName);
+      });
+      if(!order.length){ showToast("No sheets found in file"); return; }
+      workbook.sheets = newSheets;
+      workbook.order = order;
+      workbook.current = order[0];
+      selection={r1:0,c1:0,r2:0,c2:0}; active={r:0,c:0};
+      computedCache={}; renderAll(); markDirty();
+      showToast(`Excel file imported (${order.length} sheet${order.length>1?'s':''})`);
+    }catch(err){
+      showToast("Couldn't read that Excel file");
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  xlsxInput.value = "";
+});
+
 /* ================= SAVE / LOAD ================= */
 function saveWorkbook(manual){
   try{
     workbook.filename = document.getElementById('filename').value;
+    workbook.lastSavedAt = Date.now();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(workbook));
     registerInIndex(DOC_ID, workbook.filename || "Untitled spreadsheet", false);
-    document.getElementById('saveStatus').textContent = "All changes saved";
+    if(!authState) setSaveStatus("All changes saved", "");
     document.title = (workbook.filename || "Untitled spreadsheet") + " — Pro Sheet";
-    if(manual) showToast("Saved");
-  }catch(e){ document.getElementById('saveStatus').textContent = "Save failed"; }
+    if(manual){
+      showToast("Saved");
+      if(authState) cloudSaveCurrentDoc();
+    }
+  }catch(e){ setSaveStatus("Save failed", "error"); }
 }
 function loadWorkbook(){
   try{
@@ -1797,642 +2489,18 @@ function loadWorkbook(){
 document.getElementById('saveBtn').onclick = ()=>saveWorkbook(true);
 document.getElementById('filename').addEventListener('input', markDirty);
 document.getElementById('filename').addEventListener('keydown', (e)=>{ if(e.key==='Enter') e.target.blur(); });
-/* ================= APPS SCRIPT BACKEND ================= */
-const RESERVED_TRIGGERS = ['onOpen','onEdit','onInstall','onSelectionChange'];
-let userFunctionsCache = {};   // name -> callable, usable directly in cell formulas
-let triggerFnsCache = {};      // onOpen / onEdit compiled handlers
-let scriptEditing = null;      // filename currently open in the editor textarea
-
-function isHtmlFile(name){ return /\.html$/i.test(name); }
-function isGsFile(name){ return /\.gs$/i.test(name); }
-
-function ensureScript(){
-  if(!workbook.script || !workbook.script.files){
-    workbook.script = {
-      files: {
-        "Code.gs":
-`function onOpen() {
-  // Runs automatically whenever this spreadsheet is opened.
-  var ui = SpreadsheetApp.getUi();
-  ui.createMenu('Custom Tools')
-    .addItem('Say hello', 'helloWorld')
-    .addToUi();
-}
-
-function helloWorld() {
-  Logger.log('Hello from Apps Script!');
-  SpreadsheetApp.getActiveSpreadsheet().toast('Hello from Apps Script!');
-}
-
-function onEdit(e) {
-  // Runs automatically whenever a cell is edited.
-  // Logger.log('Edited ' + e.range.getA1Notation() + ' -> ' + e.value);
-}
-
-// Custom function — usable directly in a cell, e.g. =DOUBLE(A1)
-function DOUBLE(n) {
-  return Number(n) * 2;
-}
-
-// doGet() is the entry point for the deployed web app.
-// It renders index.html — see the Files list for that file, just like
-// a real Google Apps Script web app project.
-function doGet() {
-  return HtmlService.createHtmlOutputFromFile('index')
-    .setTitle('My Web App')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
-}`,
-        "index.html":
-`<!DOCTYPE html>
-<html>
-  <head>
-    <base target="_top">
-    <style>
-      body { font-family: sans-serif; padding: 24px; color: #222; }
-      h1 { font-size: 20px; }
-    </style>
-  </head>
-  <body>
-    <h1>Hello from your Apps Script web app!</h1>
-    <p>Edit this file (and Code.gs's doGet()) to build your UI, then hit Deploy.</p>
-  </body>
-</html>`
-      },
-      order: ["Code.gs", "index.html"],
-      current: "Code.gs"
-    };
-  }
-  return workbook.script;
-}
-function compileScript(){
-  // Only .gs files are compiled into the JS runtime; .html files are served/rendered, not executed.
-  const scr = ensureScript();
-  return scr.order.filter(isGsFile).map(f=>scr.files[f]).join('\n\n');
-}
-
-/* ---- SpreadsheetApp / Logger / Browser / Utilities / HtmlService runtime ---- */
-function buildScriptAPI(){
-  function parseA1Range(a1){
-    a1 = String(a1).toUpperCase().trim();
-    if(a1.includes(':')){
-      const [a,b] = a1.split(':');
-      const pa=parseId(a), pb=parseId(b);
-      return {r1:Math.min(pa.r,pb.r), c1:Math.min(pa.c,pb.c), r2:Math.max(pa.r,pb.r), c2:Math.max(pa.c,pb.c)};
-    }
-    const p = parseId(a1);
-    return {r1:p.r,c1:p.c,r2:p.r,c2:p.c};
-  }
-  function applyRangeFormat(r1,c1,r2,c2,mutator){
-    for(let r=r1;r<=r2;r++) for(let c=c1;c<=c2;c++){
-      const cell = ensureCell(cellId(c,r));
-      cell.f = cell.f || {};
-      mutator(cell.f);
-    }
-  }
-  function wrapRange(sheetName,r1,c1,r2,c2){
-    const s = ()=>workbook.sheets[sheetName];
-    return {
-      getA1Notation(){ return (r1===r2&&c1===c2)? cellId(c1,r1) : `${cellId(c1,r1)}:${cellId(c2,r2)}`; },
-      getRow(){ return r1+1; },
-      getColumn(){ return c1+1; },
-      getNumRows(){ return r2-r1+1; },
-      getNumColumns(){ return c2-c1+1; },
-      getValue(){ return evaluateInSheet(sheetName, cellId(c1,r1)); },
-      getValues(){
-        const out=[];
-        for(let r=r1;r<=r2;r++){ const row=[]; for(let c=c1;c<=c2;c++) row.push(evaluateInSheet(sheetName, cellId(c,r))); out.push(row); }
-        return out;
-      },
-      setValue(v){
-        const cell = s().data[cellId(c1,r1)] || (s().data[cellId(c1,r1)]={v:"",f:{}});
-        cell.v = String(v);
-        computedCache={};
-        return this;
-      },
-      setValues(arr){
-        arr.forEach((row,ri)=>{
-          row.forEach((v,ci)=>{
-            const rr=r1+ri, cc=c1+ci;
-            if(rr>=s().rows || cc>=COLS) return;
-            const id = cellId(cc,rr);
-            const cell = s().data[id] || (s().data[id]={v:"",f:{}});
-            cell.v = String(v);
-          });
-        });
-        computedCache={};
-        return this;
-      },
-      clearContent(){
-        for(let r=r1;r<=r2;r++) for(let c=c1;c<=c2;c++){ const id=cellId(c,r); if(s().data[id]) s().data[id].v=""; }
-        computedCache={};
-        return this;
-      },
-      setBackground(color){ applyRangeFormat(r1,c1,r2,c2,f=>f.bg=color); return this; },
-      setFontColor(color){ applyRangeFormat(r1,c1,r2,c2,f=>f.color=color); return this; },
-      setFontWeight(w){ applyRangeFormat(r1,c1,r2,c2,f=>f.bold=(w==='bold')); return this; },
-      setNumberFormat(fmt){ applyRangeFormat(r1,c1,r2,c2,f=>f.numFmt=fmt); return this; }
-    };
-  }
-  function evaluateInSheet(sheetName, id){
-    const prev = workbook.current;
-    if(sheetName===prev) return evaluateCell(id);
-    workbook.current = sheetName; computedCache={};
-    const v = evaluateCell(id);
-    workbook.current = prev; computedCache={};
-    return v;
-  }
-  function sheetWrapper(name){
-    return {
-      getName(){ return name; },
-      getRange(a1){ const rr=parseA1Range(a1); return wrapRange(name,rr.r1,rr.c1,rr.r2,rr.c2); },
-      getDataRange(){
-        const s = workbook.sheets[name];
-        let lastR=0,lastC=0;
-        Object.keys(s.data).forEach(id=>{ const p=parseId(id); if(s.data[id].v!==""){ if(p.r+1>lastR) lastR=p.r+1; if(p.c+1>lastC) lastC=p.c+1; } });
-        return wrapRange(name,0,0,Math.max(lastR-1,0),Math.max(lastC-1,0));
-      },
-      getLastRow(){
-        const s = workbook.sheets[name];
-        let last=0; Object.keys(s.data).forEach(id=>{ const p=parseId(id); if(s.data[id].v!=="" && p.r+1>last) last=p.r+1; });
-        return last;
-      },
-      getLastColumn(){
-        const s = workbook.sheets[name];
-        let last=0; Object.keys(s.data).forEach(id=>{ const p=parseId(id); if(s.data[id].v!=="" && p.c+1>last) last=p.c+1; });
-        return last;
-      },
-      appendRow(values){
-        const s = workbook.sheets[name];
-        let last=0; Object.keys(s.data).forEach(id=>{ const p=parseId(id); if(p.r+1>last) last=p.r+1; });
-        values.forEach((v,ci)=>{ if(ci<COLS) s.data[cellId(ci,last)] = {v:String(v), f:{}}; });
-        if(last>=s.rows) s.rows = last+1;
-        computedCache={};
-        return this;
-      },
-      clear(){ workbook.sheets[name].data = {}; computedCache={}; return this; },
-      insertRowAfter(row){ const prev=workbook.current; workbook.current=name; insertRow(row); workbook.current=prev; return this; },
-      insertColumnAfter(col){ const prev=workbook.current; workbook.current=name; insertCol(col+1); workbook.current=prev; return this; }
-    };
-  }
-  const menuBuilder = {
-    createMenu(label){
-      const menu = {label, items:[]};
-      const api = {
-        addItem(itemLabel, fnName){ menu.items.push({label:itemLabel, fn:fnName}); return api; },
-        addSeparator(){ menu.items.push({sep:true}); return api; },
-        addToUi(){ addCustomMenu(menu); }
-      };
-      return api;
-    },
-    alert(msg){ appendLog('[alert] '+msg,'info'); window.alert(msg); },
-    showToast(msg){ showToast(msg); }
-  };
-  const SpreadsheetApp = {
-    getActiveSpreadsheet(){
-      return {
-        getName(){ return document.getElementById('filename').value; },
-        getSheets(){ return workbook.order.map(sheetWrapper); },
-        getSheetByName(n){ return workbook.sheets[n]? sheetWrapper(n): null; },
-        getActiveSheet(){ return sheetWrapper(workbook.current); },
-        insertSheet(n){
-          n = n || ("Sheet"+(workbook.order.length+1));
-          if(!workbook.sheets[n]){ workbook.sheets[n]=makeSheet(); workbook.order.push(n); }
-          return sheetWrapper(n);
-        },
-        toast(msg, title){ showToast((title? title+': ':'')+msg); },
-        getUi(){ return menuBuilder; }
-      };
-    },
-    getActiveSheet(){ return sheetWrapper(workbook.current); },
-    getUi(){ return menuBuilder; }
-  };
-  const Logger = { log(msg){ const s = (typeof msg==='object')? JSON.stringify(msg) : String(msg); appendLog(s,'info'); } };
-  const Browser = { msgBox(msg){ appendLog('[msgBox] '+msg,'info'); window.alert(msg); } };
-  const Utilities = {
-    formatDate(date, tz, fmt){ try{ return new Date(date).toLocaleString(); }catch(e){ return String(date); } },
-    sleep(){ /* no-op: synchronous sandbox */ }
-  };
-  // HtmlService — mirrors the real Apps Script HtmlOutput builder, backed by the
-  // .html files stored in this project (see ensureScript()/scr.files).
-  function makeHtmlOutput(content){
-    let html = content;
-    let title = '';
-    return {
-      getContent(){ return html; },
-      setContent(c){ html = c; return this; },
-      append(c){ html += c; return this; },
-      setTitle(t){ title = t; return this; },
-      getTitle(){ return title; },
-      addMetaTag(){ return this; },          // no-op in the sandbox, kept for API parity
-      setXFrameOptionsMode(){ return this; }, // no-op in the sandbox
-      setWidth(){ return this; },
-      setHeight(){ return this; }
-    };
-  }
-  const HtmlService = {
-    createHtmlOutputFromFile(name){
-      const scr = ensureScript();
-      const fname = isHtmlFile(name) ? name : (name + '.html');
-      const content = scr.files[fname];
-      if(content === undefined) throw new Error('HtmlService: file "' + fname + '" not found in this project');
-      return makeHtmlOutput(content);
-    },
-    createHtmlOutput(html){ return makeHtmlOutput(html || ''); },
-    createTemplateFromFile(name){
-      const scr = ensureScript();
-      const fname = isHtmlFile(name) ? name : (name + '.html');
-      const content = scr.files[fname];
-      if(content === undefined) throw new Error('HtmlService: file "' + fname + '" not found in this project');
-      return {
-        evaluate(){ return makeHtmlOutput(content); }
-      };
-    }
-  };
-  return {SpreadsheetApp, Logger, Browser, Utilities, HtmlService};
-}
-/* ---- compiling user code into formula functions + triggers ---- */
-function extractFunctionNames(src){
-  const names = [];
-  const re = /function\s+([A-Za-z_]\w*)\s*\(/g;
-  let m;
-  while((m = re.exec(src))) names.push(m[1]);
-  return names;
-}
-function recompileUserFunctions(){
-  userFunctionsCache = {};
-  try{
-    const src = compileScript();
-    const names = extractFunctionNames(src).filter(n=>!RESERVED_TRIGGERS.includes(n) && n!=='doGet' && n!=='doPost');
-    if(!names.length) return;
-    const body = src + `\n;return {${names.map(n=>`"${n}": (typeof ${n}==='function'?${n}:undefined)`).join(',')}};`;
-    const fns = new Function(body)();
-    names.forEach(n=>{ if(typeof fns[n]==='function') userFunctionsCache[n]=fns[n]; });
-  }catch(e){ /* formulas fall back silently on script syntax errors */ }
-}
-function recompileTriggers(){
-  triggerFnsCache = {};
-  try{
-    const src = compileScript();
-    const api = buildScriptAPI();
-    const factory = new Function('SpreadsheetApp','Logger','Browser','Utilities','HtmlService',
-      src + `\n;return {onOpen: typeof onOpen==='function'?onOpen:undefined, onEdit: typeof onEdit==='function'?onEdit:undefined};`);
-    triggerFnsCache = factory(api.SpreadsheetApp, api.Logger, api.Browser, api.Utilities, api.HtmlService) || {};
-  }catch(e){ triggerFnsCache = {}; }
-}
-function fireOnEdit(cellIdStr, oldValue, newValue){
-  if(!triggerFnsCache.onEdit) return;
-  try{
-    const api = buildScriptAPI();
-    const range = api.SpreadsheetApp.getActiveSheet().getRange(cellIdStr);
-    triggerFnsCache.onEdit({ range, oldValue, value:newValue, source: api.SpreadsheetApp.getActiveSpreadsheet() });
-  }catch(e){ appendLog('onEdit() error: '+e.message,'error'); }
-}
-function fireOnOpen(){
-  if(!triggerFnsCache.onOpen) return;
-  try{ triggerFnsCache.onOpen({}); }
-  catch(e){ /* silent — no console open at load time */ }
-}
-/* ---- custom menus created via SpreadsheetApp.getUi() ---- */
-let customMenus = [];
-function addCustomMenu(menu){
-  customMenus = customMenus.filter(m=>m.label!==menu.label);
-  customMenus.push(menu);
-  renderCustomMenus();
-}
-function renderCustomMenus(){
-  const container = document.getElementById('customMenuContainer');
-  container.innerHTML = "";
-  customMenus.forEach(menu=>{
-    const item = document.createElement('div');
-    item.className = 'menu-item';
-    item.textContent = menu.label;
-    const dd = document.createElement('div');
-    dd.className = 'dropdown';
-    menu.items.forEach(it=>{
-      if(it.sep){ const sep=document.createElement('div'); sep.className='dropdown-sep'; dd.appendChild(sep); return; }
-      const di = document.createElement('div');
-      di.className = 'dropdown-item';
-      di.textContent = it.label;
-      di.onclick = (e)=>{ e.stopPropagation(); closeAllMenus(); runScript(it.fn, true); };
-      dd.appendChild(di);
-    });
-    item.appendChild(dd);
-    item.addEventListener('click', (e)=>{
-      e.stopPropagation();
-      const isOpen = dd.classList.contains('show');
-      closeAllMenus();
-      if(!isOpen){ dd.classList.add('show'); item.classList.add('active'); }
-    });
-    container.appendChild(item);
-  });
-}
-
-/* ---- execution log ---- */
-function appendLog(msg, type){
-  const log = document.getElementById('scriptLog');
-  const line = document.createElement('div');
-  line.className = 'script-log-line ' + (type||'info');
-  const ts = new Date().toLocaleTimeString();
-  line.innerHTML = `<span class="ts">${ts}</span>${escapeHtml(msg)}`;
-  log.appendChild(line);
-  log.scrollTop = log.scrollHeight;
-}
-
-/* ---- running a function from the IDE / a custom menu ---- */
-function runScript(fnName, fromMenu){
-  scriptSaveCurrentFile();
-  recompileTriggers();
-  recompileUserFunctions();
-  const src = compileScript();
-  const api = buildScriptAPI();
-  const statusEl = document.getElementById('scriptRunStatus');
-  try{
-    pushUndo();
-    const factory = new Function('SpreadsheetApp','Logger','Browser','Utilities','HtmlService',
-      src + `\n;return typeof ${fnName}==='function' ? ${fnName} : null;`);
-    const fn = factory(api.SpreadsheetApp, api.Logger, api.Browser, api.Utilities, api.HtmlService);
-    if(typeof fn !== 'function'){
-      appendLog(`Error: function "${fnName}" was not found`, 'error');
-      if(statusEl) statusEl.textContent = 'Failed';
-      return;
-    }
-    appendLog(`Running ${fnName}()…`, 'info');
-    const result = fn();
-    appendLog('Execution completed' + (result!==undefined ? (' → ' + JSON.stringify(result)) : ''), 'success');
-    if(statusEl) statusEl.textContent = 'Finished';
-    computedCache = {}; renderAll(); markDirty();
-    populateFunctionSelect();
-  }catch(e){
-    appendLog('Error: ' + e.message, 'error');
-    if(statusEl) statusEl.textContent = 'Failed';
-    if(!fromMenu) throw e;
-  }
-}
-/* ---- local preview of doGet() as a web app, before deploying for real ---- */
-function previewWebApp(){
-  scriptSaveCurrentFile();
-  recompileTriggers();
-  recompileUserFunctions();
-  const src = compileScript();
-  const api = buildScriptAPI();
-  try{
-    const factory = new Function('SpreadsheetApp','Logger','Browser','Utilities','HtmlService',
-      src + `\n;return typeof doGet==='function' ? doGet : null;`);
-    const fn = factory(api.SpreadsheetApp, api.Logger, api.Browser, api.Utilities, api.HtmlService);
-    if(typeof fn !== 'function'){
-      appendLog('Error: no doGet() function found — add one to preview as a web app.', 'error');
-      showToast('No doGet() function found');
-      return;
-    }
-    const out = fn({});
-    const html = (out && typeof out.getContent === 'function') ? out.getContent() : String(out);
-    document.getElementById('previewUrl').textContent = 'Local preview — doGet()' + (out && out.getTitle && out.getTitle() ? (' · ' + out.getTitle()) : '');
-    document.getElementById('previewFrame').srcdoc = html;
-    document.getElementById('previewOverlay').classList.add('show');
-    appendLog('Rendered doGet() preview.', 'success');
-  }catch(e){
-    appendLog('Preview error: ' + e.message, 'error');
-    showToast('Preview failed — see execution log');
-  }
-}
-document.getElementById('scriptPreviewBtn').onclick = previewWebApp;
-document.getElementById('previewCloseBtn').onclick = ()=>{
-  document.getElementById('previewOverlay').classList.remove('show');
-  document.getElementById('previewFrame').srcdoc = '';
-};
-document.getElementById('previewOverlay').addEventListener('click', (e)=>{
-  if(e.target.id==='previewOverlay'){
-    document.getElementById('previewOverlay').classList.remove('show');
-    document.getElementById('previewFrame').srcdoc = '';
-  }
-});
-
-/* ---- deploy: push workbook data + script/html files to Google Drive + Apps Script via the GAS backend ---- */
-async function deployProject(){
-  scriptSaveCurrentFile();
-  if(!googleIdToken){ showToast('Sign in with Google first to deploy'); return; }
-  if(!gasConfigured()){ showToast('Set GAS_WEBAPP_URL at the top of the script first'); appendLog('Deploy failed: GAS_WEBAPP_URL is not configured.', 'error'); return; }
-  const btn = document.getElementById('scriptDeployBtn');
-  const statusEl = document.getElementById('scriptRunStatus');
-  btn.disabled = true; const prevLabel = btn.textContent; btn.textContent = 'Deploying…';
-  appendLog('Deploying project to Google Drive…', 'info');
-  try{
-    const scr = ensureScript();
-    const result = await gasCall('deploy', {
-      docId: DOC_ID,
-      name: document.getElementById('filename').value || 'Untitled spreadsheet',
-      workbook,
-      scriptFiles: scr.files,
-      scriptOrder: scr.order
-    });
-    appendLog('Deployed successfully.', 'success');
-    appendLog('Sheet: ' + result.sheetUrl, 'success');
-    appendLog('Drive folder: ' + result.folderUrl, 'success');
-    if(result.webAppUrl){
-      appendLog('Web app URL: ' + result.webAppUrl, 'success');
-    } else if(result.webAppError){
-      appendLog('Web app deployment skipped: ' + result.webAppError, 'error');
-    }
-    if(statusEl) statusEl.textContent = 'Deployed';
-    // Persist the deployment result so the "Open Web App" link survives closing this dialog
-    // and reopening the Apps Script editor later (or reloading the page).
-    scr.deployment = {
-      webAppUrl: result.webAppUrl || null,
-      sheetUrl: result.sheetUrl || null,
-      folderUrl: result.folderUrl || null,
-      scriptEditorUrl: result.scriptEditorUrl || null,
-      deployedAt: Date.now()
-    };
-    updateWebAppLink();
-    markDirty();
-    showDeployResultDialog(result);
-    showToast(result.webAppUrl ? 'Deployed — web app URL ready' : 'Deployed to Google Drive');
-  }catch(e){
-    appendLog('Deploy failed: ' + e.message, 'error');
-    if(statusEl) statusEl.textContent = 'Deploy failed';
-    showToast('Deploy failed — see execution log');
-  }finally{
-    btn.disabled=false; btn.textContent = prevLabel;
-  }
-}
-/* Show/hide the persistent "Open Web App" link in the Apps Script topbar based on the
-   last successful deployment (if any) stored on workbook.script.deployment. */
-function updateWebAppLink(){
-  const link = document.getElementById('scriptOpenWebAppLink');
-  if(!link) return;
-  const scr = ensureScript();
-  const dep = scr.deployment;
-  if(dep && dep.webAppUrl){
-    link.href = dep.webAppUrl;
-    link.style.display = 'flex';
-    link.title = 'Open the deployed web app (' + new Date(dep.deployedAt).toLocaleString() + ')';
-  } else {
-    link.style.display = 'none';
-    link.removeAttribute('href');
-  }
-}
-function showDeployResultDialog(result){
-  const webAppSection = result.webAppUrl ? `
-    <label>Deployed web app URL</label>
-    <input id="dlgWebAppUrl" readonly value="${escapeHtml(result.webAppUrl)}" onclick="this.select()">
-  ` : `
-    <label>Web app URL</label>
-    <p style="font-size:11.5px;color:var(--text-faint);margin:2px 0 0;line-height:1.5;">${result.webAppError? escapeHtml(result.webAppError) : 'Not deployed as a web app yet — check the execution log.'}</p>
-  `;
-  showDialog(`
-    <h3>Deployed to Google Drive</h3>
-    <p style="font-size:12.5px;color:var(--text-dim);margin:0 0 14px;line-height:1.5;">Your spreadsheet data and Apps Script (.gs and .html) files were combined and saved to your Drive as a real Google Sheet plus its bound script project.</p>
-    ${webAppSection}
-    <div class="dialog-actions" style="justify-content:flex-start;flex-wrap:wrap;margin-top:14px;">
-      <a href="${result.sheetUrl}" target="_blank" class="btn primary" style="text-decoration:none;">Open Sheet</a>
-      <a href="${result.folderUrl}" target="_blank" class="btn" style="text-decoration:none;">Open Drive folder</a>
-      ${result.webAppUrl? `<a href="${result.webAppUrl}" target="_blank" class="btn" style="text-decoration:none;">Open Web App</a>` : ''}
-      ${result.scriptEditorUrl? `<a href="${result.scriptEditorUrl}" target="_blank" class="btn" style="text-decoration:none;">Open Script Editor</a>` : ''}
-    </div>
-    <div class="dialog-actions"><button class="btn" id="dlgClose">Close</button></div>
-  `);
-  document.getElementById('dlgClose').onclick = closeDialog;
-}
-
-/* ---- Apps Script IDE UI ---- */
-function openScriptEditor(){
-  ensureScript();
-  document.getElementById('scriptProjName').textContent = '— ' + (document.getElementById('filename').value || 'Untitled spreadsheet');
-  renderScriptFiles();
-  selectScriptFile(workbook.script.current);
-  populateFunctionSelect();
-  updateWebAppLink();
-  document.getElementById('scriptOverlay').classList.add('show');
-}
-function closeScriptEditor(){
-  scriptSaveCurrentFile();
-  document.getElementById('scriptOverlay').classList.remove('show');
-  recompileUserFunctions();
-  recompileTriggers();
-  computedCache={}; renderAll();
-}
-function renderScriptFiles(){
-  const scr = ensureScript();
-  const list = document.getElementById('scriptFileList');
-  list.innerHTML = "";
-  scr.order.forEach(name=>{
-    const html = isHtmlFile(name);
-    const row = document.createElement('div');
-    row.className = 'script-file' + (name===scr.current ? ' active':'');
-    row.innerHTML = `<span class="fdot${html?' html':''}"></span><span class="fname">${escapeHtml(name)}</span><span class="fdel" title="Delete file">×</span>`;
-    row.querySelector('.fname').onclick = ()=>selectScriptFile(name);
-    row.querySelector('.fdot').onclick = ()=>selectScriptFile(name);
-    row.querySelector('.fdel').onclick = (e)=>{
-      e.stopPropagation();
-      if(scr.order.length<=1){ showToast("Can't delete the only script file"); return; }
-      delete scr.files[name];
-      scr.order = scr.order.filter(n=>n!==name);
-      if(scr.current===name) scr.current = scr.order[0];
-      renderScriptFiles(); selectScriptFile(scr.current);
-    };
-    list.appendChild(row);
-  });
-}
-function selectScriptFile(name){
-  scriptSaveCurrentFile();
-  const scr = ensureScript();
-  scr.current = name;
-  scriptEditing = name;
-  document.getElementById('scriptEditor').value = scr.files[name] || "";
-  document.getElementById('scriptCurrentFile').textContent = name;
-  renderScriptFiles();
-}
-function scriptSaveCurrentFile(){
-  if(!scriptEditing) return;
-  const scr = ensureScript();
-  if(scr.files[scriptEditing] !== undefined){
-    scr.files[scriptEditing] = document.getElementById('scriptEditor').value;
-  }
-}
-function populateFunctionSelect(){
-  scriptSaveCurrentFile();
-  const src = compileScript();
-  const names = extractFunctionNames(src);
-  const sel = document.getElementById('scriptFnSelect');
-  const cur = sel.value;
-  sel.innerHTML = "";
-  if(!names.length){
-    const opt = document.createElement('option'); opt.textContent = 'No functions'; sel.appendChild(opt);
-    return;
-  }
-  names.forEach(n=>{
-    const opt = document.createElement('option'); opt.value=n; opt.textContent=n+'()'; sel.appendChild(opt);
-  });
-  if(names.includes(cur)) sel.value = cur;
-}
-document.getElementById('scriptAddFile').onclick = ()=>{
-  showDialog(`
-    <h3>New file</h3>
-    <label>File name</label><input id="dlgScriptName" placeholder="Utilities.gs or index.html" value=".gs">
-    <p style="font-size:11px;color:var(--text-faint);margin:6px 2px 0;">Use a <code>.gs</code> name for server-side script files, or <code>.html</code> for a page servable via <code>HtmlService</code> (e.g. from <code>doGet()</code>).</p>
-    <div class="dialog-actions"><button class="btn" id="dlgCancel">Cancel</button><button class="btn primary" id="dlgOk">Create</button></div>
-  `);
-  document.getElementById('dlgCancel').onclick = closeDialog;
-  document.getElementById('dlgOk').onclick = ()=>{
-    let name = document.getElementById('dlgScriptName').value.trim();
-    if(!name){ closeDialog(); return; }
-    const scr = ensureScript();
-    let content;
-    if(isHtmlFile(name)){
-      content = `<!DOCTYPE html>\n<html>\n  <head>\n    <base target="_top">\n  </head>\n  <body>\n    <p>New page.</p>\n  </body>\n</html>\n`;
-    } else {
-      if(!name.endsWith('.gs')) name += '.gs';
-      content = `function ${name.replace(/\.gs$/,'').replace(/[^A-Za-z0-9_]/g,'_') || 'myFunction'}() {\n  \n}\n`;
-    }
-    if(scr.files[name]){ showToast('A file with that name already exists'); closeDialog(); return; }
-    scr.files[name] = content;
-    scr.order.push(name);
-    closeDialog();
-    renderScriptFiles(); selectScriptFile(name); populateFunctionSelect();
-  };
-};
-document.getElementById('scriptRunBtn').onclick = ()=>{
-  const fn = document.getElementById('scriptFnSelect').value;
-  if(!fn) return;
-  runScript(fn);
-};
-document.getElementById('scriptSaveBtn').onclick = ()=>{
-  scriptSaveCurrentFile();
-  recompileUserFunctions();
-  recompileTriggers();
-  populateFunctionSelect();
-  computedCache={}; renderAll(); markDirty();
-  showToast('Script saved');
-};
-document.getElementById('scriptDeployBtn').onclick = deployProject;
-document.getElementById('scriptCloseBtn').onclick = closeScriptEditor;
-document.getElementById('scriptClearLog').onclick = ()=>{ document.getElementById('scriptLog').innerHTML = ""; };
-document.getElementById('scriptEditor').addEventListener('keydown', (e)=>{
-  if(e.key==='Tab'){
-    e.preventDefault();
-    const ta = e.target;
-    const start = ta.selectionStart, end = ta.selectionEnd;
-    ta.value = ta.value.slice(0,start) + '  ' + ta.value.slice(end);
-    ta.selectionStart = ta.selectionEnd = start+2;
-  }
-});
-document.getElementById('scriptEditor').addEventListener('input', ()=>{ populateFunctionSelect(); });
-document.getElementById('scriptOverlay').addEventListener('click', (e)=>{
-  if(e.target.id==='scriptOverlay') closeScriptEditor();
-});
 
 /* ================= INIT ================= */
+loadAuthState();
 loadWorkbook();
 if(!workbook.sheets[workbook.current]) workbook.current = workbook.order[0];
-ensureScript();
 registerInIndex(DOC_ID, workbook.filename || "Untitled spreadsheet", false);
 document.title = (workbook.filename || "Untitled spreadsheet") + " — Pro Sheet";
-recompileUserFunctions();
-recompileTriggers();
 renderAll();
-fireOnOpen();
-initGoogleAuth();
+syncUndoRedoButtons();
 gridEl.setAttribute('tabindex','0');
+initGoogleSignIn();
+if(authState) cloudLoadCurrentDoc();
 
 })();
 </script>
