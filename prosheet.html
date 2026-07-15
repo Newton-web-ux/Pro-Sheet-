@@ -523,6 +523,7 @@ td.cell.active-cell{
       <button class="btn" id="scriptPreviewBtn" title="Preview doGet() as a web app">◱ Preview</button>
       <button class="btn" id="scriptSaveBtn">Save</button>
       <button class="btn" id="scriptDeployBtn" style="background:linear-gradient(135deg,var(--accent),#9b6cff);border:none;color:#0b0d13;font-weight:700;">⇪ Deploy</button>
+      <a class="btn" id="scriptOpenWebAppLink" href="#" target="_blank" rel="noopener" style="display:none;text-decoration:none;white-space:nowrap;">🔗 Open Web App</a>
       <span class="script-run-status" id="scriptRunStatus"></span>
       <div style="margin-left:auto;"></div>
       <button class="btn" id="scriptCloseBtn">Close</button>
@@ -555,7 +556,6 @@ td.cell.active-cell{
 </div>
 
 <div class="toast" id="toast"></div>
-
 <script>
 (function(){
 "use strict";
@@ -1025,7 +1025,6 @@ function renderAll(){
   renderTabs();
   document.getElementById('cellsInfo').textContent = `${COLS} cols · ${sheet().rows} rows`;
 }
-
 /* ================= SELECTION & NAVIGATION ================= */
 function setActive(r,c,extend){
   r = clamp(r,0,sheet().rows-1); c = clamp(c,0,COLS-1);
@@ -1283,7 +1282,6 @@ function forEachSelected(cb){
   const c1=Math.min(selection.c1,selection.c2), c2=Math.max(selection.c1,selection.c2);
   for(let r=r1;r<=r2;r++) for(let c=c1;c<=c2;c++) cb(cellId(c,r), r, c);
 }
-
 /* ================= COPY / PASTE ================= */
 function copySelection(cut){
   const r1=Math.min(selection.r1,selection.r2), r2=Math.max(selection.r1,selection.r2);
@@ -1477,7 +1475,6 @@ function handleAction(act){
     case 'openAppsScript': openScriptEditor(); break;
   }
 }
-
 /* ================= ROWS/COLS INSERT ================= */
 function insertRow(atR){
   pushUndo();
@@ -1697,7 +1694,6 @@ function renameOrDeleteSheet(name){
     closeDialog(); computedCache={}; renderAll(); markDirty();
   };
 }
-
 /* ================= IMPORT / EXPORT ================= */
 function exportCsv(){
   const s = sheet();
@@ -1801,7 +1797,6 @@ function loadWorkbook(){
 document.getElementById('saveBtn').onclick = ()=>saveWorkbook(true);
 document.getElementById('filename').addEventListener('input', markDirty);
 document.getElementById('filename').addEventListener('keydown', (e)=>{ if(e.key==='Enter') e.target.blur(); });
-
 /* ================= APPS SCRIPT BACKEND ================= */
 const RESERVED_TRIGGERS = ['onOpen','onEdit','onInstall','onSelectionChange'];
 let userFunctionsCache = {};   // name -> callable, usable directly in cell formulas
@@ -2097,7 +2092,6 @@ function fireOnOpen(){
   try{ triggerFnsCache.onOpen({}); }
   catch(e){ /* silent — no console open at load time */ }
 }
-
 /* ---- custom menus created via SpreadsheetApp.getUi() ---- */
 let customMenus = [];
 function addCustomMenu(menu){
@@ -2240,6 +2234,17 @@ async function deployProject(){
       appendLog('Web app deployment skipped: ' + result.webAppError, 'error');
     }
     if(statusEl) statusEl.textContent = 'Deployed';
+    // Persist the deployment result so the "Open Web App" link survives closing this dialog
+    // and reopening the Apps Script editor later (or reloading the page).
+    scr.deployment = {
+      webAppUrl: result.webAppUrl || null,
+      sheetUrl: result.sheetUrl || null,
+      folderUrl: result.folderUrl || null,
+      scriptEditorUrl: result.scriptEditorUrl || null,
+      deployedAt: Date.now()
+    };
+    updateWebAppLink();
+    markDirty();
     showDeployResultDialog(result);
     showToast(result.webAppUrl ? 'Deployed — web app URL ready' : 'Deployed to Google Drive');
   }catch(e){
@@ -2248,6 +2253,22 @@ async function deployProject(){
     showToast('Deploy failed — see execution log');
   }finally{
     btn.disabled=false; btn.textContent = prevLabel;
+  }
+}
+/* Show/hide the persistent "Open Web App" link in the Apps Script topbar based on the
+   last successful deployment (if any) stored on workbook.script.deployment. */
+function updateWebAppLink(){
+  const link = document.getElementById('scriptOpenWebAppLink');
+  if(!link) return;
+  const scr = ensureScript();
+  const dep = scr.deployment;
+  if(dep && dep.webAppUrl){
+    link.href = dep.webAppUrl;
+    link.style.display = 'flex';
+    link.title = 'Open the deployed web app (' + new Date(dep.deployedAt).toLocaleString() + ')';
+  } else {
+    link.style.display = 'none';
+    link.removeAttribute('href');
   }
 }
 function showDeployResultDialog(result){
@@ -2280,6 +2301,7 @@ function openScriptEditor(){
   renderScriptFiles();
   selectScriptFile(workbook.script.current);
   populateFunctionSelect();
+  updateWebAppLink();
   document.getElementById('scriptOverlay').classList.add('show');
 }
 function closeScriptEditor(){
