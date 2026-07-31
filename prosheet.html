@@ -354,6 +354,7 @@ td.cell.active-cell{
 </style>
 </head>
 <body>
+<script>if(new URLSearchParams(location.search).get('webapp')==='1'){document.documentElement.style.visibility='hidden';}</script>
 
 <!-- TOP BAR -->
 <div class="topbar">
@@ -522,6 +523,7 @@ td.cell.active-cell{
       <button class="btn primary" id="scriptRunBtn">▶ Run</button>
       <button class="btn" id="scriptTestBtn" title="Execute this code for real on OneCompiler's Node.js runtime (outside the in-browser sandbox)">⚙ Test (Live)</button>
       <button class="btn" id="scriptPreviewBtn" title="Preview doGet() as a web app">◱ Preview</button>
+      <button class="btn" id="scriptWebAppUrlBtn" title="Get a shareable URL that dynamically renders doGet() from this browser's saved data">🔗 Web App URL</button>
       <button class="btn" id="scriptSaveBtn">Save</button>
       <button class="btn" id="scriptDeployBtn" style="background:linear-gradient(135deg,var(--accent),#9b6cff);border:none;color:#0b0d13;font-weight:700;">⇪ Deploy</button>
       <a class="btn" id="scriptOpenWebAppLink" href="#" target="_blank" rel="noopener" style="display:none;text-decoration:none;white-space:nowrap;">🔗 Open Web App</a>
@@ -604,7 +606,7 @@ const COLORS = ["#e7e9ef","#8b90a3","#ff6b6b","#ffb454","#ffe066","#4ade80","#4d
 // Shared OAuth Client ID used across the Pro suite.
 const GOOGLE_CLIENT_ID = "384904424093-j1a6kupjerhjufurpvur4hbik6k90bla.apps.googleusercontent.com";
 // Paste the /exec URL of your deployed Code.gs Web App here.
-const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycby12euVnoYDG8yR6UcvqzNWoD-hCf78An-JW9RiAJTUjlJAdCLIz2o0_4jekIAl9KLgNw/exec";
+const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwf6fBIUOQX0xHj-hEOmH6U__5BMqCHQZBb7XqpwHLdGZ_nlp1FZ7976CmgBoAfS8Jk8w/exec";
 let googleIdToken = null;
 let googleUser = null;
 let cloudSyncTimer = null;
@@ -2281,6 +2283,74 @@ document.getElementById('previewOverlay').addEventListener('click', (e)=>{
   }
 });
 
+/* ---- dynamic Web App URL: a shareable URL that re-runs doGet() fresh on every load,
+   reading from this browser's saved workbook (localStorage, or Drive if signed in and
+   synced on this device) — unlike the static srcdoc snapshot the Preview button shows. ---- */
+function isWebAppMode(){
+  return new URLSearchParams(window.location.search).get('webapp') === '1';
+}
+function buildWebAppUrl(){
+  const url = new URL(window.location.href);
+  const params = new URLSearchParams();
+  params.set('id', DOC_ID);
+  params.set('webapp', '1');
+  url.search = params.toString();
+  return url.toString();
+}
+function initWebAppMode(){
+  try{
+    loadWorkbook();
+    if(!workbook.sheets[workbook.current]) workbook.current = workbook.order[0];
+    ensureScript();
+    recompileUserFunctions();
+    recompileTriggers();
+    computedCache = {};
+    const api = buildScriptAPI();
+    const src = compileScript();
+    const factory = new Function('SpreadsheetApp','Logger','Browser','Utilities','HtmlService',
+      src + `\n;return typeof doGet==='function' ? doGet : null;`);
+    const fn = factory(api.SpreadsheetApp, api.Logger, api.Browser, api.Utilities, api.HtmlService);
+    if(typeof fn !== 'function'){
+      document.documentElement.style.visibility = 'visible';
+      document.body.innerHTML = '<div style="font-family:sans-serif;padding:40px;color:#900;background:#fff;">Error: this project has no <code>doGet()</code> function defined in Code.gs.</div>';
+      return;
+    }
+    const urlParams = {};
+    new URLSearchParams(window.location.search).forEach((v,k)=>{ if(k!=='id' && k!=='webapp') urlParams[k]=v; });
+    const e = { parameter: urlParams, parameters: {} };
+    Object.keys(urlParams).forEach(k=>{ e.parameters[k] = [urlParams[k]]; });
+    const out = fn(e);
+    const html = (out && typeof out.getContent === 'function') ? out.getContent() : String(out);
+    document.open();
+    document.write(html);
+    document.close();
+    if(out && out.getTitle && out.getTitle()) document.title = out.getTitle();
+  }catch(err){
+    document.documentElement.style.visibility = 'visible';
+    document.body.innerHTML = '<div style="font-family:sans-serif;padding:40px;color:#900;background:#fff;">Web app error: ' + escapeHtml(String((err && err.message) || err)) + '</div>';
+  }
+}
+document.getElementById('scriptWebAppUrlBtn').onclick = ()=>{
+  scriptSaveCurrentFile();
+  recompileUserFunctions();
+  recompileTriggers();
+  const url = buildWebAppUrl();
+  showDialog(`
+    <h3>Dynamic Web App URL</h3>
+    <p style="font-size:11.5px;color:var(--text-dim);margin:0 0 12px;line-height:1.5;">This URL re-runs <code>doGet()</code> fresh every time it's opened, using the workbook and script saved in this browser (or synced to your Drive, if you're signed in). It updates automatically as you edit Code.gs/index.html and Save — no redeploy needed. Anyone opening it from a browser without this saved data will see an error; for a link that works for anyone, anywhere, use <strong>Deploy</strong> instead.</p>
+    <label>URL</label>
+    <input id="dlgWebAppDynUrl" readonly value="${escapeHtml(url)}" onclick="this.select()">
+    <div class="dialog-actions">
+      <button class="btn" id="dlgCopyUrl">Copy</button>
+      <a class="btn primary" href="${escapeHtml(url)}" target="_blank" rel="noopener" style="text-decoration:none;">Open</a>
+    </div>
+  `);
+  document.getElementById('dlgCopyUrl').onclick = ()=>{
+    if(navigator.clipboard) navigator.clipboard.writeText(url).then(()=>showToast('Copied')).catch(()=>{});
+    else showToast('Copy failed — select and copy manually');
+  };
+};
+
 /* ---- deploy: push workbook data + script/html files to Google Drive + Apps Script via the GAS backend ---- */
 async function deployProject(){
   scriptSaveCurrentFile();
@@ -2496,17 +2566,21 @@ document.getElementById('scriptOverlay').addEventListener('click', (e)=>{
 });
 
 /* ================= INIT ================= */
-loadWorkbook();
-if(!workbook.sheets[workbook.current]) workbook.current = workbook.order[0];
-ensureScript();
-registerInIndex(DOC_ID, workbook.filename || "Untitled spreadsheet", false);
-document.title = (workbook.filename || "Untitled spreadsheet") + " — Pro Sheet";
-recompileUserFunctions();
-recompileTriggers();
-renderAll();
-fireOnOpen();
-initGoogleAuth();
-gridEl.setAttribute('tabindex','0');
+if(isWebAppMode()){
+  initWebAppMode();
+} else {
+  loadWorkbook();
+  if(!workbook.sheets[workbook.current]) workbook.current = workbook.order[0];
+  ensureScript();
+  registerInIndex(DOC_ID, workbook.filename || "Untitled spreadsheet", false);
+  document.title = (workbook.filename || "Untitled spreadsheet") + " — Pro Sheet";
+  recompileUserFunctions();
+  recompileTriggers();
+  renderAll();
+  fireOnOpen();
+  initGoogleAuth();
+  gridEl.setAttribute('tabindex','0');
+}
 
 })();
 </script>
