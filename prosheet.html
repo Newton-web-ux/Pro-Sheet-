@@ -2321,9 +2321,19 @@ function initWebAppMode(){
     Object.keys(urlParams).forEach(k=>{ e.parameters[k] = [urlParams[k]]; });
     const out = fn(e);
     const html = (out && typeof out.getContent === 'function') ? out.getContent() : String(out);
-    document.open();
-    document.write(html);
-    document.close();
+    // Render via a full-viewport iframe (srcdoc) rather than document.write() — document.write()
+    // after page load is deprecated, silently no-ops in several browsers/sandboxed preview
+    // contexts, and was leaving this page blank. An iframe is the same proven technique the
+    // Preview button already uses.
+    document.body.innerHTML = '';
+    document.body.style.margin = '0';
+    document.body.style.overflow = 'hidden';
+    const frame = document.createElement('iframe');
+    frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-modals allow-popups');
+    frame.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:none;background:#fff;';
+    frame.srcdoc = html;
+    document.documentElement.style.visibility = 'visible';
+    document.body.appendChild(frame);
     if(out && out.getTitle && out.getTitle()) document.title = out.getTitle();
   }catch(err){
     document.documentElement.style.visibility = 'visible';
