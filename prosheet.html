@@ -2365,6 +2365,10 @@ function initWebAppMode(){
     new URLSearchParams(window.location.search).forEach((v,k)=>{ if(k!=='id' && k!=='webapp') urlParams[k]=v; });
     const e = { parameter: urlParams, parameters: {} };
     Object.keys(urlParams).forEach(k=>{ e.parameters[k] = [urlParams[k]]; });
+    // Sandbox-only: a real deployed Apps Script web app's URL already scopes it to one
+    // project, so `e` never needs a doc id. Here one page hosts many documents, so we
+    // expose it separately (not mixed into e.parameter) for building self-links/forms.
+    e.docId = DOC_ID;
     const out = fn(e);
     const html = (out && typeof out.getContent === 'function') ? out.getContent() : String(out);
     // Render via a full-viewport iframe (srcdoc) rather than document.write() — document.write()
