@@ -2032,6 +2032,54 @@ function buildScriptAPI(){
       setHeight(){ return this; }
     };
   }
+  // Compiles Apps Script HTML-service scriptlet syntax into a JS function body:
+  //   <?= expr ?>   -> HTML-escaped output
+  //   <?!= expr ?>  -> raw (unescaped) output
+  //   <? code ?>    -> scriptlet — arbitrary JS (loops, ifs, etc.), no output
+  function compileTemplateSource(source){
+    let code = 'var __out=[];\n';
+    const re = /<\?(!?=)?([\s\S]*?)\?>/g;
+    let lastIndex = 0, m;
+    const pushLiteral = (str)=>{ if(str) code += '__out.push(' + JSON.stringify(str) + ');\n'; };
+    while((m = re.exec(source))){
+      pushLiteral(source.slice(lastIndex, m.index));
+      const marker = m[1];
+      const expr = m[2].trim();
+      if(marker === '='){ code += '__out.push(__esc(' + expr + '));\n'; }
+      else if(marker === '!='){ code += '__out.push(String(' + expr + '));\n'; }
+      else { code += expr + '\n'; }
+      lastIndex = re.lastIndex;
+    }
+    pushLiteral(source.slice(lastIndex));
+    code += 'return __out.join("");';
+    return code;
+  }
+  // Mirrors real Apps Script's HtmlTemplate object: you set arbitrary properties on it
+  // (`template.rows = [...]`), and those become plain variables inside the scriptlets
+  // when you call .evaluate().
+  function makeTemplateObject(content){
+    const props = {};
+    return new Proxy(props, {
+      get(target, prop){
+        if(prop === 'evaluate'){
+          return function(){
+            const code = compileTemplateSource(content);
+            const varNames = Object.keys(props);
+            const varDecls = varNames.map(k=>'var ' + k + ' = __tmpl[' + JSON.stringify(k) + '];').join('\n');
+            try{
+              const fn = new Function('__esc', '__tmpl', varDecls + '\n' + code);
+              const htmlStr = fn(escapeHtml, props);
+              return makeHtmlOutput(htmlStr);
+            }catch(err){
+              throw new Error('Template evaluation error: ' + err.message);
+            }
+          };
+        }
+        return target[prop];
+      },
+      set(target, prop, value){ target[prop] = value; return true; }
+    });
+  }
   const HtmlService = {
     createHtmlOutputFromFile(name){
       const scr = ensureScript();
@@ -2046,9 +2094,7 @@ function buildScriptAPI(){
       const fname = isHtmlFile(name) ? name : (name + '.html');
       const content = scr.files[fname];
       if(content === undefined) throw new Error('HtmlService: file "' + fname + '" not found in this project');
-      return {
-        evaluate(){ return makeHtmlOutput(content); }
-      };
+      return makeTemplateObject(content);
     }
   };
   return {SpreadsheetApp, Logger, Browser, Utilities, HtmlService};
