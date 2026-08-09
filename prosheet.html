@@ -267,6 +267,7 @@ td.cell.active-cell{
 .dialog{
   background:var(--surface-2);border:1px solid var(--border);border-radius:12px;
   padding:20px;width:340px;box-shadow:0 20px 50px rgba(0,0,0,.6);
+  max-height:86vh;overflow-y:auto;
 }
 .dialog h3{margin:0 0 14px;font-family:'Syne',sans-serif;font-size:15px;color:var(--text);}
 .dialog label{font-size:11.5px;color:var(--text-dim);display:block;margin:10px 0 4px;}
@@ -508,7 +509,7 @@ const COLORS = ["#e7e9ef","#8b90a3","#ff6b6b","#ffb454","#ffe066","#4ade80","#4d
                  "transparent","#0e1016","#151822","#1c202c","#242938","#2a2f3d","#3a4a8a","#6c8cff33","#4ade8033","#ffb45433"];
 
 /* ================= CLOUD SYNC (Google OAuth + Apps Script) ================= */
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzM3LPYmo7V_zqoqzyaxbIZlEeAvZF-0vg2B38Kpm84TqrtEKQvimYZGQ8BDBRsTKgjaA/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzR1YIn6ulXaNV2lCiljfrcQKuD3OAbEbUqgJc0ej5GdYXPjQPcghQlGvGdsyFH9DL1-w/exec";
 const OAUTH_CLIENT_ID = "384904424093-j1a6kupjerhjufurpvur4hbik6k90bla.apps.googleusercontent.com";
 const AUTH_KEY = "prosheet_auth";
 let authState = null; // {idToken, email, name, picture}
@@ -2059,70 +2060,260 @@ function duplicateSheet(){
 }
 
 /* ================= CHART ================= */
-let currentChartType = 'bar';
-function openChartDialog(){
-  renderChartDialogBody();
+const CHART_PALETTE_DARK  = ['#6c8cff','#9b6cff','#4ade80','#ffb454','#ff6b6b','#4dd0e1','#ff7ac6','#f1c40f'];
+const CHART_PALETTE_LIGHT = ['#4472C4','#ED7D31','#70AD47','#FFC000','#5B9BD5','#A5A5A5','#264478','#9E480E'];
+let currentChartType = 'bar'; // bar | hbar | line | area | pie | doughnut | scatter
+let currentChartBg = 'dark';  // dark | light
+
+function chartTheme(){
+  if(currentChartBg==='light'){
+    return { panel:'#ffffff', border:'#d9dce3', grid:'#eceef3', text:'#2b2e38', textFaint:'#8a8f9c', palette:CHART_PALETTE_LIGHT };
+  }
+  return { panel:'var(--surface)', border:'var(--border)', grid:'var(--grid-line)', text:'#e7e9ef', textFaint:'#8b90a3', palette:CHART_PALETTE_DARK };
 }
-function renderChartDialogBody(){
+
+/* Reads the current selection into labels + one-or-more value series.
+   If the selection spans more than one column, each extra column becomes
+   its own series (grouped bars / multi-line), like picking multiple
+   columns for a chart in Excel. */
+function getChartData(){
   const r1=Math.min(selection.r1,selection.r2), r2=Math.max(selection.r1,selection.r2);
   const c1=Math.min(selection.c1,selection.c2), c2=Math.max(selection.c1,selection.c2);
-  const labels = [], values = [];
+  const labels = [];
+  const multiCol = c2>c1;
+  const numSeries = multiCol ? (c2-c1) : 1;
+  const series = [];
+  for(let s=0;s<numSeries;s++) series.push({ name: multiCol ? `Series ${s+1}` : 'Value', values: [] });
   for(let r=r1;r<=r2;r++){
     const lid = cellId(c1,r);
     labels.push(String(evaluateCell(lid)));
-    const v = toNum(evaluateCell(c2>c1? cellId(c1+1,r) : lid));
-    values.push(isNaN(v)?0:v);
+    if(multiCol){
+      for(let s=0;s<numSeries;s++){
+        const v = toNum(evaluateCell(cellId(c1+1+s, r)));
+        series[s].values.push(isNaN(v)?0:v);
+      }
+    } else {
+      const v = toNum(evaluateCell(lid));
+      series[0].values.push(isNaN(v)?0:v);
+    }
   }
-  const max = Math.max(...values,1);
+  return {labels, series};
+}
+
+function openChartDialog(){ renderChartDialogBody(); }
+
+function chartWrapStyle(th){
+  return `background:${th.panel};border:1px solid ${th.border};border-radius:8px;padding:14px;`;
+}
+function truncLabel(l){ return l.length>10 ? l.slice(0,9)+'…' : l; }
+function renderLegend(names, th){
+  return `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;">${names.map((n,i)=>
+    `<div style="display:flex;align-items:center;gap:5px;font-size:10.5px;color:${th.text};"><span style="width:9px;height:9px;border-radius:2px;background:${th.palette[i%th.palette.length]};display:inline-block;"></span>${escapeHtml(n)}</div>`
+  ).join('')}</div>`;
+}
+
+function renderBarChartSVG(labels, series, max, th, horizontal){
+  const w=540, h=280, padL=44, padR=16, padT=16, padB=34;
+  const plotW=w-padL-padR, plotH=h-padT-padB, gridLines=4;
+  let gridHtml = "";
+  for(let i=0;i<=gridLines;i++){
+    const frac = i/gridLines;
+    if(!horizontal){
+      const y = padT + plotH*(1-frac);
+      gridHtml += `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="${th.grid}" stroke-width="1"/>`;
+      gridHtml += `<text x="${padL-6}" y="${y+3}" font-size="9" text-anchor="end" fill="${th.textFaint}" font-family="DM Mono, monospace">${round2(max*frac)}</text>`;
+    } else {
+      const x = padL + plotW*frac;
+      gridHtml += `<line x1="${x}" y1="${padT}" x2="${x}" y2="${h-padB}" stroke="${th.grid}" stroke-width="1"/>`;
+      gridHtml += `<text x="${x}" y="${h-padB+14}" font-size="9" text-anchor="middle" fill="${th.textFaint}" font-family="DM Mono, monospace">${round2(max*frac)}</text>`;
+    }
+  }
+  const n=labels.length, sN=series.length;
+  let bars="", labelsHtml="";
+  if(!horizontal){
+    const groupW = plotW/n;
+    const barW = Math.min(28, (groupW*0.7)/sN);
+    labels.forEach((lab,i)=>{
+      const groupX = padL + i*groupW + groupW/2;
+      series.forEach((s,si)=>{
+        const v = s.values[i]||0;
+        const barH = (v/max)*plotH;
+        const x = groupX - (sN*barW)/2 + si*barW;
+        const y = padT + plotH - barH;
+        bars += `<rect x="${x}" y="${y}" width="${barW-2}" height="${barH}" rx="2" fill="${th.palette[si%th.palette.length]}"/>`;
+      });
+      labelsHtml += `<text x="${groupX}" y="${h-padB+16}" font-size="9.5" text-anchor="middle" fill="${th.textFaint}" font-family="DM Mono, monospace">${escapeHtml(truncLabel(lab))}</text>`;
+    });
+  } else {
+    const groupH = plotH/n;
+    const barH = Math.min(24, (groupH*0.7)/sN);
+    labels.forEach((lab,i)=>{
+      const groupY = padT + i*groupH + groupH/2;
+      series.forEach((s,si)=>{
+        const v = s.values[i]||0;
+        const barW = (v/max)*plotW;
+        const y = groupY - (sN*barH)/2 + si*barH;
+        bars += `<rect x="${padL}" y="${y}" width="${barW}" height="${barH-2}" rx="2" fill="${th.palette[si%th.palette.length]}"/>`;
+      });
+      labelsHtml += `<text x="${padL-6}" y="${groupY+3}" font-size="9.5" text-anchor="end" fill="${th.textFaint}" font-family="DM Mono, monospace">${escapeHtml(truncLabel(lab))}</text>`;
+    });
+  }
+  const legend = sN>1 ? renderLegend(series.map(s=>s.name), th) : "";
+  return `<div style="${chartWrapStyle(th)}">
+    <svg width="100%" viewBox="0 0 ${w} ${h}">
+      ${gridHtml}
+      <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${h-padB}" stroke="${th.border}" stroke-width="1"/>
+      <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="${th.border}" stroke-width="1"/>
+      ${bars}
+      ${labelsHtml}
+    </svg>
+    ${legend}
+  </div>`;
+}
+
+function renderLineChartSVG(labels, series, max, th, area){
+  const w=540, h=280, padL=44, padR=16, padT=16, padB=34;
+  const plotW=w-padL-padR, plotH=h-padT-padB, n=labels.length;
+  const stepX = n>1 ? plotW/(n-1) : 0, gridLines=4;
+  let gridHtml = "";
+  for(let i=0;i<=gridLines;i++){
+    const frac = i/gridLines, y = padT + plotH*(1-frac);
+    gridHtml += `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="${th.grid}" stroke-width="1"/>`;
+    gridHtml += `<text x="${padL-6}" y="${y+3}" font-size="9" text-anchor="end" fill="${th.textFaint}" font-family="DM Mono, monospace">${round2(max*frac)}</text>`;
+  }
+  let labelsHtml = "";
+  labels.forEach((lab,i)=>{
+    const x = padL + i*stepX;
+    labelsHtml += `<text x="${x}" y="${h-padB+16}" font-size="9.5" text-anchor="middle" fill="${th.textFaint}" font-family="DM Mono, monospace">${escapeHtml(truncLabel(lab))}</text>`;
+  });
+  let paths = "";
+  series.forEach((s,si)=>{
+    const color = th.palette[si%th.palette.length];
+    const pts = s.values.map((v,i)=>`${padL+i*stepX},${padT+plotH-(v/max*plotH)}`);
+    if(area){
+      const areaPts = `${padL},${padT+plotH} ${pts.join(' ')} ${padL+(n-1)*stepX},${padT+plotH}`;
+      paths += `<polygon points="${areaPts}" fill="${color}" fill-opacity="0.18" stroke="none"/>`;
+    }
+    paths += `<polyline points="${pts.join(' ')}" fill="none" stroke="${color}" stroke-width="2.5"/>`;
+    paths += pts.map(p=>{ const [x,y]=p.split(','); return `<circle cx="${x}" cy="${y}" r="3" fill="${color}"/>`; }).join('');
+  });
+  const legend = series.length>1 ? renderLegend(series.map(s=>s.name), th) : "";
+  return `<div style="${chartWrapStyle(th)}">
+    <svg width="100%" viewBox="0 0 ${w} ${h}">
+      ${gridHtml}
+      <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${h-padB}" stroke="${th.border}" stroke-width="1"/>
+      <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="${th.border}" stroke-width="1"/>
+      ${paths}
+      ${labelsHtml}
+    </svg>
+    ${legend}
+  </div>`;
+}
+
+function renderPieChartSVG(labels, values, th, doughnut){
+  const total = values.reduce((a,b)=>a+b,0) || 1;
+  let angle=0;
+  const cx=90, cy=90, r=80, innerR = doughnut? 44 : 0;
+  const slices = values.map((v,i)=>{
+    const frac=v/total, start=angle, end=angle+frac*360; angle=end;
+    const large=(end-start)>180?1:0;
+    const toXY=(deg,rad)=>{ const a=(deg-90)*Math.PI/180; return [cx+rad*Math.cos(a), cy+rad*Math.sin(a)]; };
+    const [x1,y1]=toXY(start,r), [x2,y2]=toXY(end,r);
+    const color = th.palette[i%th.palette.length];
+    if(doughnut){
+      const [ix1,iy1]=toXY(start,innerR), [ix2,iy2]=toXY(end,innerR);
+      return `<path d="M${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} L${ix2},${iy2} A${innerR},${innerR} 0 ${large} 0 ${ix1},${iy1} Z" fill="${color}"/>`;
+    }
+    return `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} Z" fill="${color}"/>`;
+  }).join('');
+  const legend = labels.map((l,i)=>{
+    const pct = total? round2(values[i]/total*100) : 0;
+    return `<div style="display:flex;align-items:center;gap:6px;font-size:10.5px;color:${th.text};"><span style="width:10px;height:10px;border-radius:2px;background:${th.palette[i%th.palette.length]};display:inline-block;flex-shrink:0;"></span>${escapeHtml(l)} <span style="color:${th.textFaint};font-family:'DM Mono',monospace;">${pct}%</span></div>`;
+  }).join('');
+  return `<div style="display:flex;gap:18px;align-items:center;${chartWrapStyle(th)}">
+    <svg width="180" height="180" viewBox="0 0 180 180">${slices}</svg>
+    <div style="display:flex;flex-direction:column;gap:6px;">${legend}</div>
+  </div>`;
+}
+
+function renderScatterChartSVG(series, th){
+  // First series = X values, second series (if present) = Y values; otherwise plots value vs index.
+  const w=540, h=280, padL=44, padR=16, padT=16, padB=34;
+  const plotW=w-padL-padR, plotH=h-padT-padB;
+  const xs = series[0] ? series[0].values : [];
+  const ys = series[1] ? series[1].values : xs.map((_,i)=>i);
+  const maxX = Math.max(...xs,1), minX = Math.min(...xs,0);
+  const maxY = Math.max(...ys,1), minY = Math.min(...ys,0);
+  const gridLines=4;
+  let gridHtml = "";
+  for(let i=0;i<=gridLines;i++){
+    const frac=i/gridLines, y=padT+plotH*(1-frac);
+    gridHtml += `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="${th.grid}" stroke-width="1"/>`;
+    gridHtml += `<text x="${padL-6}" y="${y+3}" font-size="9" text-anchor="end" fill="${th.textFaint}" font-family="DM Mono, monospace">${round2(minY+(maxY-minY)*frac)}</text>`;
+  }
+  let points = "";
+  xs.forEach((xv,i)=>{
+    const yv = ys[i]!==undefined?ys[i]:0;
+    const x = padL + ((xv-minX)/((maxX-minX)||1))*plotW;
+    const y = padT + plotH - ((yv-minY)/((maxY-minY)||1))*plotH;
+    points += `<circle cx="${x}" cy="${y}" r="4" fill="${th.palette[0]}" fill-opacity="0.85"/>`;
+  });
+  return `<div style="${chartWrapStyle(th)}">
+    <svg width="100%" viewBox="0 0 ${w} ${h}">
+      ${gridHtml}
+      <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${h-padB}" stroke="${th.border}" stroke-width="1"/>
+      <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="${th.border}" stroke-width="1"/>
+      ${points}
+    </svg>
+  </div>`;
+}
+
+function renderChartDialogBody(){
+  const {labels, series} = getChartData();
+  const values = series[0] ? series[0].values : [];
+  const max = Math.max(...series.flatMap(s=>s.values), 1);
+  const th = chartTheme();
   let chartHtml = "";
-  if(currentChartType==='bar'){
-    chartHtml = `<div style="display:flex;align-items:flex-end;gap:6px;height:160px;padding:10px 4px;background:var(--surface);border-radius:8px;border:1px solid var(--border);">` +
-      values.map((v,i)=>`
-      <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;">
-        <div style="width:100%;background:linear-gradient(180deg,var(--accent),#9b6cff);border-radius:4px 4px 0 0;height:${(v/max*140)||0}px;"></div>
-        <div style="font-size:9.5px;color:var(--text-faint);font-family:'DM Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60px;">${escapeHtml(labels[i])}</div>
-      </div>`).join('') + `</div>`;
-  } else if(currentChartType==='line'){
-    const w=280,h=150,pad=10;
-    const stepX = values.length>1 ? (w-2*pad)/(values.length-1) : 0;
-    const pts = values.map((v,i)=>`${pad+i*stepX},${h-pad-(v/max*(h-2*pad))}`).join(' ');
-    chartHtml = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;">
-      <svg width="100%" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
-        <polyline points="${pts}" fill="none" stroke="#6c8cff" stroke-width="2.5"/>
-        ${values.map((v,i)=>`<circle cx="${pad+i*stepX}" cy="${h-pad-(v/max*(h-2*pad))}" r="3" fill="#9b6cff"/>`).join('')}
-      </svg>
-    </div>`;
-  } else if(currentChartType==='pie'){
-    const total = values.reduce((a,b)=>a+b,0) || 1;
-    let angle=0;
-    const palette=['#6c8cff','#9b6cff','#4ade80','#ffb454','#ff6b6b','#4dd0e1','#ff7ac6','#f1c40f'];
-    const slices = values.map((v,i)=>{
-      const frac = v/total, start=angle, end=angle+frac*360; angle=end;
-      const large = (end-start)>180?1:0;
-      const toXY=(deg)=>{ const rad=(deg-90)*Math.PI/180; return [60+50*Math.cos(rad), 60+50*Math.sin(rad)]; };
-      const [x1,y1]=toXY(start), [x2,y2]=toXY(end);
-      return `<path d="M60,60 L${x1},${y1} A50,50 0 ${large} 1 ${x2},${y2} Z" fill="${palette[i%palette.length]}"/>`;
-    }).join('');
-    const legend = labels.map((l,i)=>`<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text-dim);"><span style="width:9px;height:9px;border-radius:2px;background:${palette[i%palette.length]};display:inline-block;"></span>${escapeHtml(l)}</div>`).join('');
-    chartHtml = `<div style="display:flex;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;">
-      <svg width="120" height="120" viewBox="0 0 120 120">${slices}</svg>
-      <div style="display:flex;flex-direction:column;gap:4px;">${legend}</div>
-    </div>`;
+
+  if(currentChartType==='bar' || currentChartType==='hbar'){
+    chartHtml = renderBarChartSVG(labels, series, max, th, currentChartType==='hbar');
+  } else if(currentChartType==='line' || currentChartType==='area'){
+    chartHtml = renderLineChartSVG(labels, series, max, th, currentChartType==='area');
+  } else if(currentChartType==='pie' || currentChartType==='doughnut'){
+    chartHtml = renderPieChartSVG(labels, values, th, currentChartType==='doughnut');
+  } else if(currentChartType==='scatter'){
+    chartHtml = renderScatterChartSVG(series, th);
   }
+
+  const typeBtn = (type,label)=>`<button class="btn${currentChartType===type?' primary':''}" data-cht="${type}" style="padding:6px 11px;">${label}</button>`;
+
   showDialog(`
     <h3>Chart from selection</h3>
-    <div style="display:flex;gap:6px;margin-bottom:10px;">
-      <button class="btn${currentChartType==='bar'?' primary':''}" id="chtBar">Bar</button>
-      <button class="btn${currentChartType==='line'?' primary':''}" id="chtLine">Line</button>
-      <button class="btn${currentChartType==='pie'?' primary':''}" id="chtPie">Pie</button>
+    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
+      ${typeBtn('bar','Column')}
+      ${typeBtn('hbar','Bar')}
+      ${typeBtn('line','Line')}
+      ${typeBtn('area','Area')}
+      ${typeBtn('pie','Pie')}
+      ${typeBtn('doughnut','Doughnut')}
+      ${typeBtn('scatter','Scatter')}
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+      <span style="font-size:11px;color:var(--text-dim);">Background</span>
+      <button class="btn${currentChartBg==='dark'?' primary':''}" id="chtBgDark" style="padding:5px 10px;">Dark</button>
+      <button class="btn${currentChartBg==='light'?' primary':''}" id="chtBgLight" style="padding:5px 10px;">Light</button>
     </div>
     ${chartHtml}
     <div class="dialog-actions"><button class="btn primary" id="dlgClose">Close</button></div>
   `);
-  document.getElementById('chtBar').onclick = ()=>{ currentChartType='bar'; renderChartDialogBody(); };
-  document.getElementById('chtLine').onclick = ()=>{ currentChartType='line'; renderChartDialogBody(); };
-  document.getElementById('chtPie').onclick = ()=>{ currentChartType='pie'; renderChartDialogBody(); };
-  document.getElementById('dlgClose').onclick = closeDialog;
+  const dlgBox = document.getElementById('dialogBox');
+  if(dlgBox) dlgBox.style.width = '600px';
+  document.querySelectorAll('[data-cht]').forEach(btn=>{
+    btn.onclick = ()=>{ currentChartType = btn.dataset.cht; renderChartDialogBody(); };
+  });
+  document.getElementById('chtBgDark').onclick = ()=>{ currentChartBg='dark'; renderChartDialogBody(); };
+  document.getElementById('chtBgLight').onclick = ()=>{ currentChartBg='light'; renderChartDialogBody(); };
+  document.getElementById('dlgClose').onclick = ()=>{ document.getElementById('dialogBox').style.width=''; closeDialog(); };
 }
 document.getElementById('chartBtn').onclick = openChartDialog;
 
