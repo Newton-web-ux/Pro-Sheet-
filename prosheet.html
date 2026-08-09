@@ -225,6 +225,34 @@ td.cell.active-cell{
 }
 .col-sel-band{background:rgba(108,140,255,.05);}
 
+/* ============ CHART OBJECTS (embedded on sheet, like Excel) ============ */
+#chartLayer{position:absolute;top:0;left:0;pointer-events:none;z-index:8;}
+.chart-box{
+  position:absolute;background:var(--surface);border:1px solid var(--border);border-radius:9px;
+  box-shadow:0 10px 26px rgba(0,0,0,.4);display:flex;flex-direction:column;overflow:hidden;
+}
+.chart-box.chart-selected{outline:2px solid var(--accent);outline-offset:1px;}
+.chart-toolbar{
+  display:flex;align-items:center;justify-content:space-between;gap:6px;
+  padding:4px 6px;background:var(--surface-2);border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.chart-drag{
+  flex:1;cursor:move;color:var(--text-faint);font-size:11px;letter-spacing:2px;padding:2px 4px;user-select:none;
+}
+.chart-del{
+  width:18px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:4px;
+  color:var(--text-dim);cursor:pointer;font-size:11px;flex-shrink:0;
+}
+.chart-del:hover{background:var(--danger);color:#fff;}
+.chart-body{flex:1;min-height:0;padding:6px;overflow:hidden;}
+.chart-body>div{height:100%;box-sizing:border-box;}
+.chart-body svg{width:100%;height:100%;}
+.chart-resize{
+  position:absolute;right:0;bottom:0;width:14px;height:14px;cursor:nwse-resize;
+  background:linear-gradient(135deg,transparent 50%,var(--text-faint) 50%);opacity:.6;
+}
+.chart-resize:hover{opacity:1;}
+
 /* ============ SHEET TABS ============ */
 .sheettabs{
   display:flex;align-items:center;gap:2px;padding:5px 10px;background:var(--header-bg);
@@ -642,7 +670,8 @@ function makeSheet(){
     rows: DEFAULT_ROWS,
     merges: [],           // {r1,c1,r2,c2}
     frozenRow: 0,
-    frozenCol: 0
+    frozenCol: 0,
+    charts: []             // {id,type,bg,r1,c1,r2,c2,x,y,w,h} — embedded chart objects, like Excel
   };
 }
 function sheet(){ return workbook.sheets[workbook.current]; }
@@ -682,7 +711,7 @@ function markDirty(){
 /* ================= UNDO/REDO ================= */
 function snapshot(){
   return JSON.stringify({data:sheet().data, merges:sheet().merges, rows:sheet().rows,
-    colWidths:sheet().colWidths, rowHeights:sheet().rowHeights});
+    colWidths:sheet().colWidths, rowHeights:sheet().rowHeights, charts:sheet().charts});
 }
 function pushUndo(){
   undoStack.push({sheetName:workbook.current, snap:snapshot()});
@@ -694,6 +723,7 @@ function restore(snapObj){
   const s = JSON.parse(snapObj.snap);
   const sh = workbook.sheets[snapObj.sheetName];
   sh.data = s.data; sh.merges = s.merges; sh.rows = s.rows; sh.colWidths = s.colWidths; sh.rowHeights = s.rowHeights;
+  sh.charts = s.charts || [];
 }
 function undo(){
   if(!undoStack.length) return;
@@ -1246,6 +1276,7 @@ function renderAll(){
   renderGrid();
   renderSelectionVisual();
   renderTabs();
+  renderCharts();
   document.getElementById('cellsInfo').textContent = `${COLS} cols · ${sheet().rows} rows`;
 }
 
@@ -2064,21 +2095,21 @@ const CHART_PALETTE_DARK  = ['#6c8cff','#9b6cff','#4ade80','#ffb454','#ff6b6b','
 const CHART_PALETTE_LIGHT = ['#4472C4','#ED7D31','#70AD47','#FFC000','#5B9BD5','#A5A5A5','#264478','#9E480E'];
 let currentChartType = 'bar'; // bar | hbar | line | area | pie | doughnut | scatter
 let currentChartBg = 'dark';  // dark | light
+let chartDialogRange = null;  // {r1,c1,r2,c2} captured when the dialog opened
 
-function chartTheme(){
-  if(currentChartBg==='light'){
+function chartThemeFor(bg){
+  if(bg==='light'){
     return { panel:'#ffffff', border:'#d9dce3', grid:'#eceef3', text:'#2b2e38', textFaint:'#8a8f9c', palette:CHART_PALETTE_LIGHT };
   }
   return { panel:'var(--surface)', border:'var(--border)', grid:'var(--grid-line)', text:'#e7e9ef', textFaint:'#8b90a3', palette:CHART_PALETTE_DARK };
 }
+function chartTheme(){ return chartThemeFor(currentChartBg); }
 
-/* Reads the current selection into labels + one-or-more value series.
-   If the selection spans more than one column, each extra column becomes
+/* Reads a given range into labels + one-or-more value series.
+   If the range spans more than one column, each extra column becomes
    its own series (grouped bars / multi-line), like picking multiple
    columns for a chart in Excel. */
-function getChartData(){
-  const r1=Math.min(selection.r1,selection.r2), r2=Math.max(selection.r1,selection.r2);
-  const c1=Math.min(selection.c1,selection.c2), c2=Math.max(selection.c1,selection.c2);
+function getChartDataForRange(r1,c1,r2,c2){
   const labels = [];
   const multiCol = c2>c1;
   const numSeries = multiCol ? (c2-c1) : 1;
@@ -2099,8 +2130,18 @@ function getChartData(){
   }
   return {labels, series};
 }
+function getChartData(){
+  const r1=Math.min(selection.r1,selection.r2), r2=Math.max(selection.r1,selection.r2);
+  const c1=Math.min(selection.c1,selection.c2), c2=Math.max(selection.c1,selection.c2);
+  return getChartDataForRange(r1,c1,r2,c2);
+}
 
-function openChartDialog(){ renderChartDialogBody(); }
+function openChartDialog(){
+  const r1=Math.min(selection.r1,selection.r2), r2=Math.max(selection.r1,selection.r2);
+  const c1=Math.min(selection.c1,selection.c2), c2=Math.max(selection.c1,selection.c2);
+  chartDialogRange = {r1,c1,r2,c2};
+  renderChartDialogBody();
+}
 
 function chartWrapStyle(th){
   return `background:${th.panel};border:1px solid ${th.border};border-radius:8px;padding:14px;`;
@@ -2160,7 +2201,7 @@ function renderBarChartSVG(labels, series, max, th, horizontal){
   }
   const legend = sN>1 ? renderLegend(series.map(s=>s.name), th) : "";
   return `<div style="${chartWrapStyle(th)}">
-    <svg width="100%" viewBox="0 0 ${w} ${h}">
+    <svg width="100%" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
       ${gridHtml}
       <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${h-padB}" stroke="${th.border}" stroke-width="1"/>
       <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="${th.border}" stroke-width="1"/>
@@ -2199,7 +2240,7 @@ function renderLineChartSVG(labels, series, max, th, area){
   });
   const legend = series.length>1 ? renderLegend(series.map(s=>s.name), th) : "";
   return `<div style="${chartWrapStyle(th)}">
-    <svg width="100%" viewBox="0 0 ${w} ${h}">
+    <svg width="100%" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
       ${gridHtml}
       <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${h-padB}" stroke="${th.border}" stroke-width="1"/>
       <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="${th.border}" stroke-width="1"/>
@@ -2231,8 +2272,8 @@ function renderPieChartSVG(labels, values, th, doughnut){
     return `<div style="display:flex;align-items:center;gap:6px;font-size:10.5px;color:${th.text};"><span style="width:10px;height:10px;border-radius:2px;background:${th.palette[i%th.palette.length]};display:inline-block;flex-shrink:0;"></span>${escapeHtml(l)} <span style="color:${th.textFaint};font-family:'DM Mono',monospace;">${pct}%</span></div>`;
   }).join('');
   return `<div style="display:flex;gap:18px;align-items:center;${chartWrapStyle(th)}">
-    <svg width="180" height="180" viewBox="0 0 180 180">${slices}</svg>
-    <div style="display:flex;flex-direction:column;gap:6px;">${legend}</div>
+    <svg width="150" height="150" viewBox="0 0 180 180" style="flex-shrink:0;">${slices}</svg>
+    <div style="display:flex;flex-direction:column;gap:6px;overflow:auto;">${legend}</div>
   </div>`;
 }
 
@@ -2259,7 +2300,7 @@ function renderScatterChartSVG(series, th){
     points += `<circle cx="${x}" cy="${y}" r="4" fill="${th.palette[0]}" fill-opacity="0.85"/>`;
   });
   return `<div style="${chartWrapStyle(th)}">
-    <svg width="100%" viewBox="0 0 ${w} ${h}">
+    <svg width="100%" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
       ${gridHtml}
       <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${h-padB}" stroke="${th.border}" stroke-width="1"/>
       <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="${th.border}" stroke-width="1"/>
@@ -2268,22 +2309,21 @@ function renderScatterChartSVG(series, th){
   </div>`;
 }
 
+function chartHtmlFor(type, labels, series, values, max, th){
+  if(type==='bar' || type==='hbar') return renderBarChartSVG(labels, series, max, th, type==='hbar');
+  if(type==='line' || type==='area') return renderLineChartSVG(labels, series, max, th, type==='area');
+  if(type==='pie' || type==='doughnut') return renderPieChartSVG(labels, values, th, type==='doughnut');
+  if(type==='scatter') return renderScatterChartSVG(series, th);
+  return "";
+}
+
 function renderChartDialogBody(){
-  const {labels, series} = getChartData();
+  const {r1,c1,r2,c2} = chartDialogRange;
+  const {labels, series} = getChartDataForRange(r1,c1,r2,c2);
   const values = series[0] ? series[0].values : [];
   const max = Math.max(...series.flatMap(s=>s.values), 1);
   const th = chartTheme();
-  let chartHtml = "";
-
-  if(currentChartType==='bar' || currentChartType==='hbar'){
-    chartHtml = renderBarChartSVG(labels, series, max, th, currentChartType==='hbar');
-  } else if(currentChartType==='line' || currentChartType==='area'){
-    chartHtml = renderLineChartSVG(labels, series, max, th, currentChartType==='area');
-  } else if(currentChartType==='pie' || currentChartType==='doughnut'){
-    chartHtml = renderPieChartSVG(labels, values, th, currentChartType==='doughnut');
-  } else if(currentChartType==='scatter'){
-    chartHtml = renderScatterChartSVG(series, th);
-  }
+  const chartHtml = chartHtmlFor(currentChartType, labels, series, values, max, th);
 
   const typeBtn = (type,label)=>`<button class="btn${currentChartType===type?' primary':''}" data-cht="${type}" style="padding:6px 11px;">${label}</button>`;
 
@@ -2304,7 +2344,10 @@ function renderChartDialogBody(){
       <button class="btn${currentChartBg==='light'?' primary':''}" id="chtBgLight" style="padding:5px 10px;">Light</button>
     </div>
     ${chartHtml}
-    <div class="dialog-actions"><button class="btn primary" id="dlgClose">Close</button></div>
+    <div class="dialog-actions">
+      <button class="btn" id="dlgClose">Close</button>
+      <button class="btn primary" id="dlgInsert">Insert into sheet</button>
+    </div>
   `);
   const dlgBox = document.getElementById('dialogBox');
   if(dlgBox) dlgBox.style.width = '600px';
@@ -2314,8 +2357,118 @@ function renderChartDialogBody(){
   document.getElementById('chtBgDark').onclick = ()=>{ currentChartBg='dark'; renderChartDialogBody(); };
   document.getElementById('chtBgLight').onclick = ()=>{ currentChartBg='light'; renderChartDialogBody(); };
   document.getElementById('dlgClose').onclick = ()=>{ document.getElementById('dialogBox').style.width=''; closeDialog(); };
+  document.getElementById('dlgInsert').onclick = ()=>{
+    pushUndo();
+    const s = sheet();
+    s.charts = s.charts || [];
+    const isCircular = (currentChartType==='pie' || currentChartType==='doughnut');
+    // stagger new charts slightly so repeated inserts don't stack exactly on top of each other
+    const n = s.charts.length;
+    s.charts.push({
+      id: 'chart_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+      type: currentChartType,
+      bg: currentChartBg,
+      r1, c1, r2, c2,
+      x: 60 + (n%5)*24,
+      y: 60 + (n%5)*24,
+      w: isCircular ? 380 : 460,
+      h: isCircular ? 260 : 300
+    });
+    document.getElementById('dialogBox').style.width = '';
+    closeDialog();
+    renderCharts();
+    markDirty();
+    showToast("Chart inserted");
+  };
 }
 document.getElementById('chartBtn').onclick = openChartDialog;
+
+/* ---- Embedded chart objects: rendered as floating, draggable, resizable
+   boxes on top of the grid (like Excel/Sheets chart objects). They read
+   live from the sheet's cell data every time they render, so they stay
+   in sync as the underlying values change. ---- */
+let chartDragMode = null;   // 'move' | 'resize'
+let chartDragTarget = null; // the chart object being manipulated
+let chartDragStart = null;
+
+function getChartLayer(){
+  let layer = document.getElementById('chartLayer');
+  if(!layer){
+    layer = document.createElement('div');
+    layer.id = 'chartLayer';
+    document.getElementById('gridwrap').appendChild(layer);
+  }
+  return layer;
+}
+function renderCharts(){
+  const layer = getChartLayer();
+  layer.innerHTML = '';
+  const charts = sheet().charts || [];
+  charts.forEach(ch=>{
+    const box = document.createElement('div');
+    box.className = 'chart-box';
+    box.style.left = ch.x + 'px';
+    box.style.top = ch.y + 'px';
+    box.style.width = ch.w + 'px';
+    box.style.height = ch.h + 'px';
+    box.style.pointerEvents = 'auto';
+    box.dataset.chartId = ch.id;
+
+    const {labels, series} = getChartDataForRange(ch.r1, ch.c1, ch.r2, ch.c2);
+    const values = series[0] ? series[0].values : [];
+    const max = Math.max(...series.flatMap(s=>s.values), 1);
+    const th = chartThemeFor(ch.bg);
+    const bodyHtml = chartHtmlFor(ch.type, labels, series, values, max, th);
+
+    box.innerHTML = `
+      <div class="chart-toolbar">
+        <span class="chart-drag" title="Drag to move">⋮⋮ ${escapeHtml(cellId(ch.c1,ch.r1))}:${escapeHtml(cellId(ch.c2,ch.r2))}</span>
+        <span class="chart-del" title="Delete chart">✕</span>
+      </div>
+      <div class="chart-body">${bodyHtml}</div>
+      <div class="chart-resize" title="Drag to resize"></div>
+    `;
+    layer.appendChild(box);
+
+    box.addEventListener('mousedown', (e)=>{ e.stopPropagation(); });
+    box.querySelector('.chart-drag').addEventListener('mousedown', (e)=>{
+      e.preventDefault(); e.stopPropagation();
+      pushUndo();
+      chartDragMode = 'move'; chartDragTarget = ch;
+      chartDragStart = {x:e.clientX, y:e.clientY, ox:ch.x, oy:ch.y};
+    });
+    box.querySelector('.chart-resize').addEventListener('mousedown', (e)=>{
+      e.preventDefault(); e.stopPropagation();
+      pushUndo();
+      chartDragMode = 'resize'; chartDragTarget = ch;
+      chartDragStart = {x:e.clientX, y:e.clientY, ow:ch.w, oh:ch.h};
+    });
+    box.querySelector('.chart-del').addEventListener('click', (e)=>{
+      e.stopPropagation();
+      pushUndo();
+      sheet().charts = (sheet().charts||[]).filter(c=>c.id!==ch.id);
+      renderCharts();
+      markDirty();
+      showToast("Chart deleted");
+    });
+  });
+}
+document.addEventListener('mousemove', (e)=>{
+  if(!chartDragMode) return;
+  if(chartDragMode==='move'){
+    chartDragTarget.x = Math.max(0, chartDragStart.ox + (e.clientX - chartDragStart.x));
+    chartDragTarget.y = Math.max(0, chartDragStart.oy + (e.clientY - chartDragStart.y));
+    renderCharts();
+  } else if(chartDragMode==='resize'){
+    chartDragTarget.w = Math.max(200, chartDragStart.ow + (e.clientX - chartDragStart.x));
+    chartDragTarget.h = Math.max(140, chartDragStart.oh + (e.clientY - chartDragStart.y));
+    renderCharts();
+  }
+});
+document.addEventListener('mouseup', ()=>{
+  if(chartDragMode){ markDirty(); }
+  chartDragMode = null; chartDragTarget = null;
+});
 
 /* ================= DIALOG HELPERS ================= */
 function showDialog(html){
@@ -2360,6 +2513,7 @@ gridEl.addEventListener('contextmenu', (e)=>{
     <div class="dropdown-sep"></div>
     <div class="dropdown-item" data-act="condFormat">Conditional formatting…</div>
     <div class="dropdown-item" data-act="namedRange">Name this range…</div>
+    <div class="dropdown-item" data-act="chart">Chart from selection</div>
     <div class="dropdown-sep"></div>
     <div class="dropdown-item" data-act="clear">Clear cells</div>
   `;
@@ -2676,6 +2830,8 @@ function loadWorkbook(){
       document.getElementById('filename').value = workbook.filename || "Untitled spreadsheet";
     }
   }catch(e){ /* ignore */ }
+  // backfill charts array for sheets saved before this feature existed
+  Object.values(workbook.sheets).forEach(sh=>{ if(!sh.charts) sh.charts = []; });
 }
 document.getElementById('saveBtn').onclick = ()=>saveWorkbook(true);
 document.getElementById('filename').addEventListener('input', markDirty);
