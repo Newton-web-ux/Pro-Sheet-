@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pro Sheet Site</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #fff; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  #mount { position: fixed; inset: 0; }
+  #state {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    text-align: center; padding: 24px; color: #5b6072; font-size: 15px; background: #fff;
+  }
+  #state[hidden] { display: none; }
+  #toast {
+    position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%) translateY(8px);
+    background: #1c202c; color: #fff; padding: 9px 16px; border-radius: 8px; font-size: 13px;
+    opacity: 0; pointer-events: none; transition: all .25s ease; max-width: 90vw;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div id="mount"></div>
+<div id="state">Loading…</div>
+<div id="toast"></div>
+
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+import { getFirestore, doc, onSnapshot, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+import { firebaseConfig } from './firebase-config.js';
+import { createRuntime } from './site-runtime.js';
+
+const stateEl = document.getElementById('state');
+const mountEl = document.getElementById('mount');
+const toastEl = document.getElementById('toast');
+
+function showState(text) { stateEl.textContent = text; stateEl.hidden = !text; }
+function toast(text) {
+  toastEl.textContent = text;
+  toastEl.classList.add('show');
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => toastEl.classList.remove('show'), 3200);
+}
+
+const query = new URLSearchParams(location.search);
+const deployId = query.get('d');
+if (!deployId) {
+  showState('This link is missing a site id.');
+} else {
+  const params = {};
+  query.forEach((v, k) => { if (k !== 'd') params[k] = v; });
+
+  const db = getFirestore(initializeApp(firebaseConfig));
+  const ref = doc(db, 'deployments', deployId);
+
+  let rt = null;
+  let codeVersion = null;
+  let pending = [];      // writes sent by this visitor that the owner has not applied yet
+  let lastData = null;
+
+  function stop() { if (rt) { rt.destroy(); rt = null; codeVersion = null; } }
+
+  async function sendOps(ops) {
+    for (const op of ops) {
+      pending.push(op);
+      try {
+        await setDoc(doc(db, 'deployments', deployId, 'ops', op.id), {
+          type: op.type, sheet: op.sheet, payload: op.payload, at: serverTimestamp()
+        });
+      } catch (err) {
+        pending = pending.filter((p) => p.id !== op.id);
+        toast('The site owner does not allow that change.');
+        if (rt && lastData) rt.setSnapshot(lastData, pending);
+      }
+    }
+  }
+
+  onSnapshot(ref, (snap) => {
+    if (!snap.exists() || snap.data().enabled === false) {
+      stop();
+      showState('This site is not available.');
+      return;
+    }
+    const d = snap.data();
+    const applied = new Set(d.appliedOps || []);
+    pending = pending.filter((p) => !applied.has(p.id));
+    let data;
+    try { data = JSON.parse(d.dataJson || '{}'); } catch (e) { data = {}; }
+    lastData = { name: data.name || '', sheets: data.sheets || {}, order: data.order || [], current: data.current || '' };
+
+    if (!rt || codeVersion !== d.codeVersion) {
+      stop();
+      codeVersion = d.codeVersion;
+      showState('');
+      rt = createRuntime({
+        files: d.files || [],
+        snapshot: lastData,
+        params,
+        mount: mountEl,
+        onOps: sendOps,
+        onTitle: (t) => { if (t) document.title = t; }
+      });
+      rt.setSnapshot(lastData, pending);
+      rt.render();
+    } else {
+      rt.setSnapshot(lastData, pending);
+    }
+  }, (err) => showState('Could not load this site (' + (err.code || 'error') + ').'));
+}
+</script>
+</body>
+</html>
