@@ -2515,6 +2515,13 @@ window.ProSheetAPI = {
   getSite: ()=>workbook.site || null,
   setSite: (s)=>{ workbook.site = s; markDirty(); },
   toast: showToast,
+  /* ---- hooks used by addon.js ---- */
+  getWorkbook: ()=>workbook,
+  getSelection: ()=>({...selection}),
+  getActive: ()=>({...active}),
+  pushUndo: pushUndo,
+  colLetter: colLetter,
+  refresh: ()=>{ computedCache = {}; renderAll(); markDirty(); },
   /* Evaluated values of every sheet as 2D arrays (used range only). */
   snapshot(){
     const out = { name: this.getName(), sheets:{}, order: workbook.order.slice(), current: workbook.current };
@@ -2588,5 +2595,6 @@ window.ProSheetAPI = {
 })();
 </script>
 <script type="module" src="sites.js"></script>
+<script src="addon.js"></script>
 </body>
 </html>
