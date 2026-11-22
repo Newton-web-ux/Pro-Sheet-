@@ -2510,6 +2510,7 @@ function typedValue(v){
   return v;
 }
 window.ProSheetAPI = {
+  FN: FN,
   getDocId: ()=>DOC_ID,
   getName: ()=>document.getElementById('filename').value || "Untitled spreadsheet",
   getSite: ()=>workbook.site || null,
@@ -2596,5 +2597,6 @@ window.ProSheetAPI = {
 </script>
 <script type="module" src="sites.js"></script>
 <script src="addon.js"></script>
+<script src="excel-ui.js"></script>
 </body>
 </html>
