@@ -42,6 +42,18 @@ function serverMain() {
     return String(v);
   }
   function uid() { return Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
+  function colName(n) { var s = ''; while (n > 0) { var m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; }
+
+  /* Strings that look like ISO dates become Date objects, "TRUE"/"FALSE" become booleans (like Apps Script) */
+  var DATE_RE = /^\d{4}-\d{2}-\d{2}(T[\d:.]+Z?)?$/;
+  function typed(v) {
+    if (typeof v === 'string') {
+      if (DATE_RE.test(v)) { var d = new Date(v); if (!isNaN(d.getTime())) return d; }
+      if (v === 'TRUE') return true;
+      if (v === 'FALSE') return false;
+    }
+    return v;
+  }
 
   /* ---- write operations: applied locally right away and reported to the host ---- */
   function applyLocal(op) {
@@ -55,6 +67,10 @@ function serverMain() {
       p.values.forEach(function (row, ri) { row.forEach(function (v, ci) { put(g, p.row + ri, p.col + ci, v); }); });
     } else if (op.type === 'clear') {
       for (var a = 0; a < p.numRows; a++) for (var b = 0; b < p.numCols; b++) put(g, p.row + a, p.col + b, '');
+    } else if (op.type === 'deleteRows') {
+      g.splice(p.row - 1, p.count);
+    } else if (op.type === 'insertRows') {
+      for (var i = 0; i < p.count; i++) g.splice(p.row - 1, 0, []);
     }
   }
   function emit(type, sheet, payload) {
@@ -63,18 +79,18 @@ function serverMain() {
     applyLocal(op);
   }
 
-  /* ---- A1 notation ---- */
+  /* ---- A1 notation (supports an optional "Sheet2!" / "'My Sheet'!" prefix) ---- */
   function colNum(s) { var n = 0; s = s.toUpperCase(); for (var i = 0; i < s.length; i++) n = n * 26 + s.charCodeAt(i) - 64; return n; }
   function parseA1(a) {
-    var m = /^\s*(?:.*!)?\$?([A-Za-z]+)\$?(\d+)(?::\$?([A-Za-z]+)\$?(\d+))?\s*$/.exec(a);
+    var m = /^\s*(?:(?:'([^']+)'|([^'!]+))!)?\$?([A-Za-z]+)\$?(\d+)(?::\$?([A-Za-z]+)\$?(\d+))?\s*$/.exec(a);
     if (!m) throw new Error('Range not found: ' + a);
-    var c1 = colNum(m[1]), r1 = +m[2], c2 = m[3] ? colNum(m[3]) : c1, r2 = m[4] ? +m[4] : r1;
-    return [Math.min(r1, r2), Math.min(c1, c2), Math.abs(r2 - r1) + 1, Math.abs(c2 - c1) + 1];
+    var c1 = colNum(m[3]), r1 = +m[4], c2 = m[5] ? colNum(m[5]) : c1, r2 = m[6] ? +m[6] : r1;
+    return { sheet: m[1] || m[2] || null, r: Math.min(r1, r2), c: Math.min(c1, c2), nr: Math.abs(r2 - r1) + 1, nc: Math.abs(c2 - c1) + 1 };
   }
 
   /* ---- Range ---- */
   function Range(sheet, r, c, nr, nc) { this.sheet = sheet; this.r = r; this.c = c; this.nr = nr; this.nc = nc; }
-  Range.prototype.getValues = function () {
+  Range.prototype.getRawValues_ = function () {
     var g = DATA.sheets[this.sheet], out = [];
     for (var i = 0; i < this.nr; i++) {
       var row = [];
@@ -83,8 +99,12 @@ function serverMain() {
     }
     return out;
   };
-  Range.prototype.getDisplayValues = function () { return this.getValues().map(function (row) { return row.map(String); }); };
-  Range.prototype.getValue = function () { return get(DATA.sheets[this.sheet], this.r, this.c); };
+  Range.prototype.getValues = function () {
+    return this.getRawValues_().map(function (row) { return row.map(typed); });
+  };
+  Range.prototype.getDisplayValues = function () { return this.getRawValues_().map(function (row) { return row.map(String); }); };
+  Range.prototype.getValue = function () { return typed(get(DATA.sheets[this.sheet], this.r, this.c)); };
+  Range.prototype.getDisplayValue = function () { return String(get(DATA.sheets[this.sheet], this.r, this.c)); };
   Range.prototype.setValues = function (v) {
     var nc = this.nc;
     if (!Array.isArray(v) || v.length !== this.nr) {
@@ -111,15 +131,35 @@ function serverMain() {
   Range.prototype.getColumn = function () { return this.c; };
   Range.prototype.getNumRows = function () { return this.nr; };
   Range.prototype.getNumColumns = function () { return this.nc; };
+  Range.prototype.getA1Notation = function () {
+    var a = colName(this.c) + this.r;
+    return this.nr * this.nc > 1 ? a + ':' + colName(this.c + this.nc - 1) + (this.r + this.nr - 1) : a;
+  };
+  Range.prototype.getCell = function (r, c) { return new Range(this.sheet, this.r + r - 1, this.c + c - 1, 1, 1); };
+  Range.prototype.offset = function (dr, dc, nr, nc) { return new Range(this.sheet, this.r + dr, this.c + dc, nr || this.nr, nc || this.nc); };
+  Range.prototype.getSheet = function () { return new Sheet(this.sheet); };
+  Range.prototype.getFormula = function () { return ''; };
+  Range.prototype.getFormulas = function () { return this.getRawValues_().map(function (r) { return r.map(function () { return ''; }); }); };
+  Range.prototype.isBlank = function () { return this.getRawValues_().every(function (r) { return r.every(function (v) { return !nonEmpty(v); }); }); };
 
   /* ---- Sheet / Spreadsheet ---- */
   function Sheet(name) { this.name = name; }
   Sheet.prototype = {
     getName: function () { return this.name; },
+    getSheetName: function () { return this.name; },
+    getIndex: function () { return DATA.order.indexOf(this.name) + 1; },
     getLastRow: function () { return lastRow(DATA.sheets[this.name]); },
     getLastColumn: function () { return lastCol(DATA.sheets[this.name]); },
+    getMaxRows: function () { return Math.max(1000, lastRow(DATA.sheets[this.name])); },
+    getMaxColumns: function () { return 26; },
+    getParent: function () { return spreadsheet; },
     getRange: function (a, b, c, d) {
-      if (typeof a === 'string') { var p = parseA1(a); return new Range(this.name, p[0], p[1], p[2], p[3]); }
+      if (typeof a === 'string') {
+        var p = parseA1(a);
+        var name = p.sheet || this.name;
+        if (!DATA.sheets[name]) throw new Error('Sheet not found: ' + name);
+        return new Range(name, p.r, p.c, p.nr, p.nc);
+      }
       if (!(a >= 1) || !(b >= 1)) throw new Error('The coordinates of the range are outside the dimensions of the sheet.');
       return new Range(this.name, a, b, c || 1, d || 1);
     },
@@ -137,27 +177,55 @@ function serverMain() {
       var g = DATA.sheets[this.name];
       emit('clear', this.name, { row: 1, col: 1, numRows: Math.max(1, lastRow(g)), numCols: Math.max(1, lastCol(g)) });
       return this;
-    }
+    },
+    deleteRows: function (row, n) { emit('deleteRows', this.name, { row: row, count: n || 1 }); return this; },
+    deleteRow: function (row) { return this.deleteRows(row, 1); },
+    insertRowsBefore: function (row, n) { emit('insertRows', this.name, { row: row, count: n || 1 }); return this; },
+    insertRowBefore: function (row) { return this.insertRowsBefore(row, 1); },
+    insertRowAfter: function (row) { return this.insertRowsBefore(row + 1, 1); },
+    insertRows: function (row, n) { return this.insertRowsBefore(row, n); }
   };
   Sheet.prototype.clearContents = Sheet.prototype.clear;
+
+  /* Formatting calls are accepted and ignored so scripts written for Google Sheets don't crash */
+  ['setBackground', 'setBackgrounds', 'setFontWeight', 'setFontColor', 'setFontSize', 'setFontFamily', 'setFontStyle',
+   'setNumberFormat', 'setNumberFormats', 'setHorizontalAlignment', 'setVerticalAlignment', 'setWrap', 'setBorder',
+   'merge', 'breakApart', 'setNote', 'setDataValidation', 'autoResizeColumns', 'autoResizeColumn', 'setColumnWidth',
+   'setRowHeight', 'setFrozenRows', 'setFrozenColumns', 'activate', 'flush', 'protect', 'hideSheet', 'showSheet',
+   'sort', 'setFormula', 'setFormulas']
+    .forEach(function (n) { Range.prototype[n] = Sheet.prototype[n] = function () { return this; }; });
 
   var spreadsheet = {
     getName: function () { return DATA.name || 'Spreadsheet'; },
     getId: function () { return 'prosheet'; },
     getUrl: function () { return ''; },
+    getSheetId: function () { return 0; },
     getSheets: function () { return DATA.order.map(function (n) { return new Sheet(n); }); },
     getSheetByName: function (n) { return DATA.sheets[n] ? new Sheet(n) : null; },
+    /* First published sheet, NOT the owner's currently selected tab */
     getActiveSheet: function () {
-      var n = DATA.sheets[DATA.current] ? DATA.current : DATA.order[0];
+      var n = DATA.order[0];
       if (!n) throw new Error('This spreadsheet has no published sheets.');
       return new Sheet(n);
-    }
+    },
+    getRange: function (a) {
+      var p = parseA1(a);
+      var name = p.sheet || DATA.order[0];
+      if (!DATA.sheets[name]) throw new Error('Sheet not found: ' + name);
+      return new Range(name, p.r, p.c, p.nr, p.nc);
+    },
+    flush: function () {}
   };
   window.SpreadsheetApp = {
     getActiveSpreadsheet: function () { return spreadsheet; },
     getActive: function () { return spreadsheet; },
     openById: function () { return spreadsheet; },
-    getActiveSheet: function () { return spreadsheet.getActiveSheet(); }
+    openByUrl: function () { return spreadsheet; },
+    getActiveSheet: function () { return spreadsheet.getActiveSheet(); },
+    flush: function () {},
+    getUi: function () {
+      return { alert: logFn, createMenu: function () { var m = { addItem: function () { return m; }, addSeparator: function () { return m; }, addToUi: function () {} }; return m; } };
+    }
   };
 
   /* ---- misc services ---- */
@@ -170,14 +238,74 @@ function serverMain() {
         return { yyyy: d.getFullYear(), MM: p(d.getMonth() + 1), dd: p(d.getDate()), HH: p(d.getHours()), mm: p(d.getMinutes()), ss: p(d.getSeconds()) }[t];
       });
     },
-    sleep: function () {}
+    sleep: function () {},
+    base64Encode: function (s) { return btoa(unescape(encodeURIComponent(s))); },
+    base64Decode: function (s) { return decodeURIComponent(escape(atob(s))); },
+    formatString: function (f) {
+      var a = Array.prototype.slice.call(arguments, 1), i = 0;
+      return String(f).replace(/%[sd]/g, function () { return a[i++]; });
+    },
+    parseCsv: function (t) { return String(t).split(/\r?\n/).filter(Boolean).map(function (l) { return l.split(','); }); }
   };
   window.Session = {
     getActiveUser: function () { return { getEmail: function () { return ''; } }; },
+    getEffectiveUser: function () { return { getEmail: function () { return ''; } }; },
     getScriptTimeZone: function () { return Intl.DateTimeFormat().resolvedOptions().timeZone; }
   };
   var lock = { waitLock: function () {}, tryLock: function () { return true; }, releaseLock: function () {}, hasLock: function () { return true; } };
   window.LockService = { getScriptLock: function () { return lock; }, getDocumentLock: function () { return lock; }, getUserLock: function () { return lock; } };
+
+  /* ---- UrlFetchApp via synchronous XHR (only works for CORS-enabled URLs) ---- */
+  window.UrlFetchApp = {
+    fetch: function (url, opt) {
+      opt = opt || {};
+      var x = new XMLHttpRequest();
+      x.open(String(opt.method || 'get').toUpperCase(), url, false);
+      var h = opt.headers || {};
+      Object.keys(h).forEach(function (k) { x.setRequestHeader(k, h[k]); });
+      if (opt.contentType) x.setRequestHeader('Content-Type', opt.contentType);
+      var body = opt.payload == null ? null : (typeof opt.payload === 'string' ? opt.payload : JSON.stringify(opt.payload));
+      try { x.send(body); } catch (e) { throw new Error('Request failed for ' + url + ' (CORS or network): ' + e.message); }
+      return {
+        getContentText: function () { return x.responseText; },
+        getResponseCode: function () { return x.status; },
+        getHeaders: function () { return {}; }
+      };
+    }
+  };
+
+  /* ---- Properties / Cache (per visitor session only) ---- */
+  function makeStore() {
+    var d = {};
+    return {
+      getProperty: function (k) { return k in d ? d[k] : null; },
+      setProperty: function (k, v) { d[k] = String(v); return this; },
+      setProperties: function (o) { for (var k in o) d[k] = String(o[k]); return this; },
+      getProperties: function () { return JSON.parse(JSON.stringify(d)); },
+      deleteProperty: function (k) { delete d[k]; return this; },
+      deleteAllProperties: function () { d = {}; return this; },
+      get: function (k) { return k in d ? d[k] : null; },
+      put: function (k, v) { d[k] = String(v); },
+      remove: function (k) { delete d[k]; }
+    };
+  }
+  var sp = makeStore(), up = makeStore(), dp = makeStore(), cache = makeStore();
+  window.PropertiesService = { getScriptProperties: function () { return sp; }, getUserProperties: function () { return up; }, getDocumentProperties: function () { return dp; } };
+  window.CacheService = { getScriptCache: function () { return cache; }, getUserCache: function () { return cache; }, getDocumentCache: function () { return cache; } };
+
+  /* ---- Services that cannot run in a browser: fail with a clear message ---- */
+  function unsupported(n) { return function () { throw new Error(n + ' is not available in Pro Sheet sites (browser-only runtime).'); }; }
+  window.MailApp = { sendEmail: unsupported('MailApp.sendEmail'), getRemainingDailyQuota: function () { return 0; } };
+  window.GmailApp = { sendEmail: unsupported('GmailApp') };
+  window.DriveApp = { getFileById: unsupported('DriveApp') };
+  var trig = {
+    timeBased: function () { return this; }, everyMinutes: function () { return this; }, everyHours: function () { return this; },
+    everyDays: function () { return this; }, onEdit: function () { return this; }, forSpreadsheet: function () { return this; }, create: function () { return {}; }
+  };
+  window.ScriptApp = {
+    getService: function () { return { getUrl: function () { return DATA.url || ''; } }; },
+    newTrigger: function () { return trig; }, getProjectTriggers: function () { return []; }, deleteTrigger: function () {}
+  };
 
   /* ---- ContentService ---- */
   function TextOutput(s) { this.__type = 'text'; this.content = String(s); this.mime = 'text/plain'; }
@@ -197,13 +325,13 @@ function serverMain() {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
     });
   }
-  function HtmlOutput(c) { this.__type = 'html'; this.content = c; this.title = ''; }
+  function HtmlOutput(c) { this.__type = 'html'; this.content = c; this.title = ''; this.metas = []; }
   HtmlOutput.prototype = {
     getContent: function () { return this.content; },
     setTitle: function (t) { this.title = String(t); return this; },
     append: function (s) { this.content += s; return this; },
     setXFrameOptionsMode: function () { return this; },
-    addMetaTag: function () { return this; },
+    addMetaTag: function (n, c) { this.metas.push([String(n), String(c)]); return this; },
     setFaviconUrl: function () { return this; }
   };
   function fileContent(name) {
@@ -339,9 +467,10 @@ function textPage(text) {
   return '<!doctype html><meta charset="utf-8"><body style="margin:0;padding:16px;font:13px ui-monospace,monospace"><pre style="white-space:pre-wrap;margin:0">' +
     escapeHtml(text) + '</pre>';
 }
-function withShim(content, title) {
+function withShim(content, title, metas) {
   const shim = '<script>(' + clientShim.toString() + ')();<\/script>';
-  const t = title ? '<title>' + escapeHtml(title) + '</title>' : '';
+  const t = (title ? '<title>' + escapeHtml(title) + '</title>' : '') +
+    (metas || []).map(([n, c]) => '<meta name="' + escapeHtml(n) + '" content="' + escapeHtml(c) + '">').join('');
   if (!/^\s*<!doctype/i.test(content)) content = '<!doctype html>' + content;
   if (/<head[^>]*>/i.test(content)) return content.replace(/<head[^>]*>/i, (m) => m + shim + t);
   return content.replace(/^(\s*<!doctype[^>]*>)/i, (m) => m + shim + t);
@@ -425,7 +554,7 @@ export function createRuntime(opts) {
     const r = await call('doGet', [e]);
     let html;
     if (!r.ok) html = errorPage(r.error, errs);
-    else if (r.result && r.result.__type === 'html') { html = withShim(r.result.content, r.result.title); o.onTitle(r.result.title || ''); }
+    else if (r.result && r.result.__type === 'html') { html = withShim(r.result.content, r.result.title, r.result.metas); o.onTitle(r.result.title || ''); }
     else if (r.result && r.result.__type === 'text') html = textPage(r.result.content);
     else html = errorPage('doGet must return HtmlService or ContentService output.', errs);
     if (site) site.remove();
