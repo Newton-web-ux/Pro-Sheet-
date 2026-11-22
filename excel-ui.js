@@ -346,6 +346,7 @@ obs.observe($('#grid'),{childList:true,subtree:true});
 const prev=window.__psOnChange;let ct;
 window.__psOnChange=()=>{if(prev)prev();checkVal();clearTimeout(ct);ct=setTimeout(renderCharts,120)};
 sync();
+window.ProSheetCharts={draw,regionSel};
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
