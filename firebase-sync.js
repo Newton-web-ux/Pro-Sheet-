@@ -11,8 +11,16 @@
    Sign-in: reuses your existing Google button (its ID token is exchanged for a Firebase session). */
 (function(){
 "use strict";
-/* ====== 1) PASTE your Firebase web-app config (Firebase console → Project settings → Your apps) ====== */
-const CFG={apiKey:"PASTE_API_KEY",authDomain:"PASTE_PROJECT.firebaseapp.com",projectId:"PASTE_PROJECT_ID",appId:"PASTE_APP_ID"};
+/* Shared Firebase web config (public by design; access is enforced by the Firestore rules). */
+const CFG={
+  apiKey:"AIzaSyAKGzMSAPluvjKf0pA_TLv2uEb0njnmmhI",
+  authDomain:"pro-sheet-38194.firebaseapp.com",
+  databaseURL:"https://pro-sheet-38194-default-rtdb.firebaseio.com",
+  projectId:"pro-sheet-38194",
+  storageBucket:"pro-sheet-38194.firebasestorage.app",
+  messagingSenderId:"121904110568",
+  appId:"1:121904110568:web:418c36bcf071f47199a25d"
+};
 
 const SDK="https://www.gstatic.com/firebasejs/10.12.2/";
 const K={IDX:'prosheet_documents_index',DOC:'prosheet_doc_',AUTH:'prosheet_auth',PEND:'prosheet_fb_pending',UID:'prosheet_fb_uid',PAT:'prosheet_fb_prefs_at'};
