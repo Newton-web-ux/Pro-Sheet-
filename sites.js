@@ -553,7 +553,7 @@ function schedulePublish() {
 function opAllowed(site, op) {
   if (!op || typeof op.sheet !== 'string' || typeof op.payload !== 'string' || op.payload.length > 20000) return false;
   if (Array.isArray(site.sheets) && !site.sheets.includes(op.sheet)) return false;
-  if (site.writeMode === 'full') return ['appendRow', 'setValues', 'clear'].includes(op.type);
+  if (site.writeMode === 'full') return ['appendRow', 'setValues', 'clear', 'deleteRows', 'insertRows'].includes(op.type);
   if (site.writeMode === 'append') return op.type === 'appendRow';
   return false;
 }
@@ -614,7 +614,7 @@ function renderDeploy() {
       <h5>Visitor writes</h5>
       <select class="pss-sel" id="pssWrite" style="width:100%">
         <option value="append" ${site.writeMode === 'append' ? 'selected' : ''}>Append rows only (recommended)</option>
-        <option value="full" ${site.writeMode === 'full' ? 'selected' : ''}>Full edit (set and clear cells)</option>
+        <option value="full" ${site.writeMode === 'full' ? 'selected' : ''}>Full edit (set, clear, insert and delete rows)</option>
         <option value="readonly" ${site.writeMode === 'readonly' ? 'selected' : ''}>Read-only</option>
       </select>
     </div>
