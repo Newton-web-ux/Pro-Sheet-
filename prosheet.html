@@ -2588,6 +2588,19 @@ window.ProSheetAPI = {
       } else if(op.type === 'clear'){
         const nr = Math.min(Math.max(p.numRows|0, 0), MAX_ROWS), nc = Math.min(Math.max(p.numCols|0, 0), COLS);
         for(let r=0; r<nr; r++) for(let c=0; c<nc; c++) put(R+r, C+c, "");
+      } else if(op.type === 'deleteRows' || op.type === 'insertRows'){
+        const n = Math.max(1, Math.min((p.count|0) || 1, 1000)), at = p.row|0;
+        if(at < 1) return;
+        const nd = {};
+        Object.keys(sh.data).forEach(id=>{
+          const q = parseId(id); let r = q.r + 1;
+          if(op.type === 'deleteRows'){ if(r >= at && r < at+n) return; if(r >= at+n) r -= n; }
+          else if(r >= at) r += n;
+          nd[cellId(q.c, r-1)] = sh.data[id];
+        });
+        sh.data = nd;
+        if(op.type === 'insertRows') sh.rows += n;
+        touched = true;
       }
     });
     if(touched){ computedCache = {}; renderAll(); markDirty(); }
